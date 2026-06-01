@@ -328,6 +328,7 @@ kualityfore run \
 主要入口：
 
 - [文档首页](docs/README.md)
+- [Artifact Protocol](docs/protocol.md)
 - [项目启动设计](docs/design/2026-06-01-kualityfore-project-bootstrap-design.md)
 - [质量记录](docs/quality/README.md)
 - [Eval 记录](docs/evals/README.md)

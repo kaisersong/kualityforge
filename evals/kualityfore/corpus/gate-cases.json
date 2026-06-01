@@ -50,5 +50,66 @@
       "requiredChecks": [{ "name": "npm test", "status": "passed" }]
     },
     "expected": { "status": "incomplete", "exitCode": 2 }
+  },
+  {
+    "name": "path traversal artifact is invalid",
+    "manifest": {
+      "runId": "eval-path-traversal",
+      "status": "verified",
+      "reviewers": [
+        { "runnerId": "codex:gpt-5", "artifact": "../codex.md" },
+        { "runnerId": "claude:sonnet", "artifact": "reviews/claude.md" }
+      ],
+      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "verified",
+        "artifact": "verify.md"
+      },
+      "findings": [],
+      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+    },
+    "expected": { "status": "invalid_artifact", "exitCode": 1 }
+  },
+  {
+    "name": "failed required check blocks gate",
+    "manifest": {
+      "runId": "eval-failed-check",
+      "status": "verified",
+      "reviewers": [
+        { "runnerId": "codex:gpt-5", "artifact": "reviews/codex.md" },
+        { "runnerId": "claude:sonnet", "artifact": "reviews/claude.md" }
+      ],
+      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "verified",
+        "artifact": "verify.md"
+      },
+      "findings": [],
+      "requiredChecks": [{ "name": "npm test", "status": "failed" }]
+    },
+    "expected": { "status": "incomplete", "exitCode": 2 }
+  },
+  {
+    "name": "fixer cannot verify its own fix",
+    "manifest": {
+      "runId": "eval-self-verify",
+      "status": "verified",
+      "reviewers": [
+        { "runnerId": "codex:gpt-5", "artifact": "reviews/codex.md" },
+        { "runnerId": "claude:sonnet", "artifact": "reviews/claude.md" }
+      ],
+      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "fixer": { "runnerId": "codex:fixer", "artifact": "fix-plan.md" },
+      "verification": {
+        "runnerId": "codex:fixer",
+        "status": "verified",
+        "artifact": "verify.md"
+      },
+      "findings": [],
+      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+    },
+    "expected": { "status": "incomplete", "exitCode": 2 }
   }
 ]

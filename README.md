@@ -328,6 +328,7 @@ Project documentation lives in `mydocs` through a symlink:
 Main docs:
 
 - [Docs index](docs/README.md)
+- [Artifact protocol](docs/protocol.md)
 - [Bootstrap design](docs/design/2026-06-01-kualityfore-project-bootstrap-design.md)
 - [Quality records](docs/quality/README.md)
 - [Eval records](docs/evals/README.md)

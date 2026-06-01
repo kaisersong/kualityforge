@@ -14,5 +14,5 @@ test("eval command runs deterministic corpus and exits zero when cases match", (
   assert.equal(result.status, 0, result.stderr);
   const output = JSON.parse(result.stdout);
   assert.equal(output.status, "passed");
-  assert.equal(output.total, 3);
+  assert.equal(output.total, 6);
 });
