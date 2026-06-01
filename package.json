@@ -8,14 +8,14 @@
     "kualityfore": "./src/cli/index.mjs"
   },
   "scripts": {
-    "test": "node --test \"tests/**/*.test.mjs\"",
-    "test:kualityfore:unit": "node --test \"tests/kualityfore/unit/**/*.test.mjs\"",
-    "test:kualityfore:fixtures": "node --test \"tests/kualityfore/fixtures/**/*.test.mjs\"",
-    "test:kualityfore:golden": "node --test \"tests/kualityfore/golden/**/*.test.mjs\"",
-    "test:kualityfore:workflow": "node --test \"tests/kualityfore/workflow/**/*.test.mjs\"",
-    "test:kualityfore:adapters": "node --test \"tests/kualityfore/adapters/**/*.test.mjs\"",
-    "test:kualityfore:ci": "node --test \"tests/kualityfore/ci/**/*.test.mjs\"",
-    "test:kualityfore:e2e": "node --test \"tests/kualityfore/e2e/**/*.test.mjs\"",
+    "test": "node --test tests/kualityfore/*/*.test.mjs",
+    "test:kualityfore:unit": "node --test tests/kualityfore/unit/*.test.mjs",
+    "test:kualityfore:fixtures": "node --test tests/kualityfore/fixtures/*.test.mjs",
+    "test:kualityfore:golden": "node --test tests/kualityfore/golden/*.test.mjs",
+    "test:kualityfore:workflow": "node --test tests/kualityfore/workflow/*.test.mjs",
+    "test:kualityfore:adapters": "node --test tests/kualityfore/adapters/*.test.mjs",
+    "test:kualityfore:ci": "node --test tests/kualityfore/ci/*.test.mjs",
+    "test:kualityfore:e2e": "node --test tests/kualityfore/e2e/*.test.mjs",
     "eval:kualityfore": "node src/cli/index.mjs eval",
     "eval:kualityfore:model-assisted": "node src/cli/index.mjs eval --model-assisted"
   },
