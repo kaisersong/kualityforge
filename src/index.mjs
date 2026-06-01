@@ -21,3 +21,11 @@ export { renderSummaryMarkdown, synthesizeFindings } from "./core/synthesis.mjs"
 export { loadEvalCases, runDeterministicEval, runDeterministicEvalCases } from "./core/eval-runner.mjs";
 export { createReviewTask } from "./core/runner-task.mjs";
 export { createWorkflowTemplate } from "./core/workflow-template.mjs";
+export {
+  KSWARM_RUNTIME_PLAN_KIND,
+  KSWARM_WORKFLOW_ID,
+  createKswarmReviewerNodeInput,
+  createKswarmRuntimePlan,
+  createKswarmScriptPreview,
+  mapGateResultToKswarmTerminal
+} from "./core/kswarm-workflow.mjs";

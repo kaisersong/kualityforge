@@ -6,6 +6,8 @@ import {
   initializeArtifactRoot,
   loadPolicyFile,
   loadManifestFromArtifactRoot,
+  createKswarmRuntimePlan,
+  createKswarmScriptPreview,
   parseReviewArtifact,
   renderSummaryMarkdown,
   reduceQualityGate,
@@ -119,6 +121,37 @@ try {
     const result = reduceQualityGate(manifest, policy);
     console.log(JSON.stringify(result, null, 2));
     process.exit(result.exitCode);
+  }
+
+  if (command === "kswarm-preview") {
+    const projectId = requireOption(args, "--project-id", "kswarm-preview");
+    const runId = requireOption(args, "--run-id", "kswarm-preview");
+    const artifactRoot = requireOption(args, "--artifact-root", "kswarm-preview");
+    const reviewers = readOptions(args, "--reviewer");
+    const context = readContextOptions(args) || {};
+    const target = readOption(args, "--target") || ".";
+    const requestedBy = readOption(args, "--requested-by");
+    const createdAtText = readOption(args, "--created-at");
+    const createdAt = createdAtText ? Number(createdAtText) : undefined;
+
+    if (reviewers.length === 0) {
+      throw new Error("kswarm-preview requires at least one --reviewer <runner-id>");
+    }
+
+    const workflowOptions = {
+      projectId,
+      runId,
+      artifactRoot,
+      reviewers,
+      target,
+      requestedBy,
+      createdAt,
+      ...context
+    };
+    const preview = createKswarmScriptPreview(workflowOptions);
+    const runtimePlan = createKswarmRuntimePlan(workflowOptions);
+    console.log(JSON.stringify({ preview, runtimePlan }, null, 2));
+    process.exit(0);
   }
 
   if (command === "write-review") {
@@ -368,6 +401,7 @@ Usage:
   kualityforge verify --artifact-root <path> --runner-id <id> --status <status> --input <verify.md>
   kualityforge gate --manifest <path>
   kualityforge gate --artifact-root <path> [--policy <path>]
+  kualityforge kswarm-preview --project-id <id> --run-id <id> --artifact-root <path> --reviewer <runner-id>... [--project-root <path>] [--docs-root <path>] [--quality-principles <json>] [--change-goal <text>] [--target <path>] [--requested-by <id>]
   kualityforge eval [--corpus <dir>] [--report <path>]
 `);
 }

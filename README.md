@@ -21,6 +21,7 @@ KualityForge is in its bootstrap phase. The repository currently contains the fi
 - Deterministic eval through `kualityforge eval`.
 - Local artifact workflow through `kualityforge run`.
 - Context pack freezing through `kualityforge init --project-root ... --docs-root ... --quality-principles ...`.
+- KSwarm dynamic workflow preview and runtime plan generation through `kualityforge kswarm-preview`.
 - Review artifact context acknowledgement, context provenance, context gaps, and quality principle violation parsing.
 - Artifact reference validation rejects absolute paths and `..` traversal.
 - Fail-closed reducer behavior for incomplete quality evidence.
@@ -28,7 +29,7 @@ KualityForge is in its bootstrap phase. The repository currently contains the fi
 - Fixture, golden, CI, and E2E tests for artifact-root initialization, synthesis output, eval, and a clean passing run.
 - Project docs via `docs -> ../mydocs/kualityforge`.
 
-Live multi-agent runner dispatch and KSwarm orchestration are intentionally staged after the deterministic core. The local `run` command consumes already-created artifacts; it does not call models.
+Live multi-agent runner dispatch is intentionally outside the deterministic core. The local `run` command consumes already-created artifacts; it does not call models. `kswarm-preview` now emits the KSwarm `script_generated` preview and KualityForge runtime plan that an external workflow runtime can submit to KSwarm.
 
 ---
 
@@ -156,7 +157,8 @@ KualityForge does not own durable workflow execution. That belongs in KSwarm.
 The boundary is:
 
 - KualityForge owns schemas, artifact parsing, reducers, CLI gates, tests, fixtures, and evals.
-- KSwarm owns `kualityforge-flow`: fan-out, retries, resume, cancellation, decision gates, and node scheduling.
+- KualityForge can generate a KSwarm `script_generated` workflow preview and a runtime plan.
+- KSwarm owns `kualityforge-flow`: fan-out state, retries, resume, cancellation, decision gates, and node scheduling.
 - Intent Broker owns runner dispatch and event correlation.
 - xiaok owns desktop / CLI entry points and user-facing status.
 
@@ -294,6 +296,7 @@ kualityforge record-check --artifact-root <path> --name <name> --status <status>
 kualityforge verify --artifact-root <path> --runner-id <id> --status <status> --input <verify.md>
 kualityforge gate --manifest <path>
 kualityforge gate --artifact-root <path>
+kualityforge kswarm-preview --project-id <id> --run-id <id> --artifact-root <path> --reviewer <runner-id>...
 kualityforge eval [--corpus <dir>] [--report <path>]
 ```
 
@@ -359,6 +362,28 @@ kualityforge run \
   --verifier-runner-id claude:verifier
 ```
 
+To hand off orchestration to KSwarm dynamic workflow, Codex can first generate a script preview and runtime plan:
+
+```bash
+kualityforge kswarm-preview \
+  --project-id <kswarm-project-id> \
+  --run-id <run-id> \
+  --artifact-root docs/quality/<run-id> \
+  --reviewer codex:gpt-5 \
+  --reviewer claude:sonnet \
+  --project-root /path/to/project \
+  --docs-root /path/to/project/docs \
+  --quality-principles /path/to/quality-principles.json \
+  --change-goal "Review this release against the declared quality profile"
+```
+
+The output contains:
+
+- `preview`: the KSwarm `script_generated` workflow preview, including stable `scriptHash`, phases, scope, and fan-out analysis.
+- `runtimePlan`: the KualityForge execution plan for the external runtime. It tells the runtime how to initialize artifacts, begin the KSwarm parallel reviewer group, dispatch reviewer nodes, write review artifacts, synthesize, verify, run the deterministic gate, and map the gate result back to KSwarm terminal status.
+
+The runtime plan is not gate evidence by itself. Reviewer node output must still be written as KualityForge review artifacts and registered in `manifest.json`.
+
 ---
 
 ## Documentation
@@ -374,6 +399,8 @@ Main docs:
 - [Docs index](docs/README.md)
 - [Artifact protocol](docs/protocol.md)
 - [Bootstrap design](docs/design/2026-06-01-kualityforge-project-bootstrap-design.md)
+- [KSwarm dynamic workflow integration](docs/design/2026-06-02-kswarm-dynamic-workflow-integration.md)
+- [KSwarm dynamic workflow adversarial review](docs/design/2026-06-02-kswarm-dynamic-workflow-integration-adversarial-review.md)
 - [Quality records](docs/quality/README.md)
 - [Eval records](docs/evals/README.md)
 

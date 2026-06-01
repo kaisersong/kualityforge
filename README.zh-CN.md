@@ -21,6 +21,7 @@ KualityForge 还在项目启动阶段。当前仓库已经包含第一片 determ
 - 通过 `kualityforge eval` 执行 deterministic eval。
 - 通过 `kualityforge run` 串起本地 artifact workflow。
 - 通过 `kualityforge init --project-root ... --docs-root ... --quality-principles ...` 冻结 context pack。
+- 通过 `kualityforge kswarm-preview` 生成 KSwarm dynamic workflow preview 和 runtime plan。
 - review artifact 支持 context acknowledgement、context provenance、context gaps 和质量原则违背 finding。
 - artifact reference validation 会拒绝绝对路径和 `..` traversal。
 - 对证据不完整的质量运行执行 fail-closed reducer。
@@ -28,7 +29,7 @@ KualityForge 还在项目启动阶段。当前仓库已经包含第一片 determ
 - 覆盖 artifact-root 初始化、synthesis 输出、eval 和 clean passing run 的 fixture、golden、CI、E2E tests。
 - 通过 `docs -> ../mydocs/kualityforge` 维护项目文档。
 
-真实多 Agent runner dispatch 和 KSwarm 编排会在 deterministic core 之后接入。当前本地 `run` 命令只消费已经生成的 artifacts，不调用模型。
+真实多 Agent runner dispatch 不属于 deterministic core。当前本地 `run` 命令只消费已经生成的 artifacts，不调用模型。`kswarm-preview` 现在可以输出 KSwarm `script_generated` preview 和 KualityForge runtime plan，供外部 workflow runtime 提交给 KSwarm。
 
 ---
 
@@ -156,7 +157,8 @@ KualityForge 不持有 durable workflow execution。这个职责属于 KSwarm。
 边界是：
 
 - KualityForge 负责 schema、artifact parsing、reducer、CLI gate、tests、fixtures 和 eval。
-- KSwarm 负责 `kualityforge-flow`：fan-out、retry、resume、cancel、decision gate 和 node scheduling。
+- KualityForge 可以生成 KSwarm `script_generated` workflow preview 和 runtime plan。
+- KSwarm 负责 `kualityforge-flow`：fan-out 状态、retry、resume、cancel、decision gate 和 node scheduling。
 - Intent Broker 负责 runner dispatch 和 event correlation。
 - xiaok 负责 desktop / CLI 入口和用户可见状态。
 
@@ -294,6 +296,7 @@ kualityforge record-check --artifact-root <path> --name <name> --status <status>
 kualityforge verify --artifact-root <path> --runner-id <id> --status <status> --input <verify.md>
 kualityforge gate --manifest <path>
 kualityforge gate --artifact-root <path>
+kualityforge kswarm-preview --project-id <id> --run-id <id> --artifact-root <path> --reviewer <runner-id>...
 kualityforge eval [--corpus <dir>] [--report <path>]
 ```
 
@@ -359,6 +362,28 @@ kualityforge run \
   --verifier-runner-id claude:verifier
 ```
 
+要把编排交给 KSwarm dynamic workflow，Codex 可以先生成 script preview 和 runtime plan：
+
+```bash
+kualityforge kswarm-preview \
+  --project-id <kswarm-project-id> \
+  --run-id <run-id> \
+  --artifact-root docs/quality/<run-id> \
+  --reviewer codex:gpt-5 \
+  --reviewer claude:sonnet \
+  --project-root /path/to/project \
+  --docs-root /path/to/project/docs \
+  --quality-principles /path/to/quality-principles.json \
+  --change-goal "按声明的质量 profile 评审本次 release"
+```
+
+输出包含：
+
+- `preview`：KSwarm `script_generated` workflow preview，包含稳定的 `scriptHash`、phases、scope 和 fan-out analysis。
+- `runtimePlan`：给外部 runtime 使用的 KualityForge 执行计划。它说明如何初始化 artifacts、启动 KSwarm parallel reviewer group、派发 reviewer node、写入 review artifact、synthesize、verify、运行 deterministic gate，并把 gate result 映射回 KSwarm terminal status。
+
+runtime plan 本身不是 gate evidence。reviewer node output 仍然必须写成 KualityForge review artifact，并登记到 `manifest.json`。
+
 ---
 
 ## 文档
@@ -374,6 +399,8 @@ kualityforge run \
 - [文档首页](docs/README.md)
 - [Artifact Protocol](docs/protocol.md)
 - [项目启动设计](docs/design/2026-06-01-kualityforge-project-bootstrap-design.md)
+- [KSwarm dynamic workflow integration](docs/design/2026-06-02-kswarm-dynamic-workflow-integration.md)
+- [KSwarm dynamic workflow adversarial review](docs/design/2026-06-02-kswarm-dynamic-workflow-integration-adversarial-review.md)
 - [质量记录](docs/quality/README.md)
 - [Eval 记录](docs/evals/README.md)
 
