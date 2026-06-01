@@ -19,6 +19,24 @@ test("normalizePolicy merges project settings with release defaults", () => {
   assert.equal(policy.requireIndependentVerifier, false);
 });
 
+test("normalizePolicy preserves context requirements", () => {
+  const policy = normalizePolicy({
+    context: {
+      projectContextRequired: true,
+      qualityPrinciplesRequired: true,
+      requiredReviewerContextAck: ["user_quality_principles", "project_brief"]
+    }
+  });
+
+  assert.equal(policy.context.projectContextRequired, true);
+  assert.equal(policy.context.qualityPrinciplesRequired, true);
+  assert.deepEqual(policy.context.requiredReviewerContextAck, [
+    "user_quality_principles",
+    "project_brief"
+  ]);
+  assert.equal(policy.context.requireReviewerContextProvenance, false);
+});
+
 test("loadPolicyFile reads .kualityforge.json style policy", async () => {
   const root = await mkdtemp(join(tmpdir(), "kualityforge-policy-"));
   try {

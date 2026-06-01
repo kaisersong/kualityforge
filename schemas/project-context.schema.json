@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kualityforge.local/schemas/project-context.schema.json",
+  "title": "KualityForge Project Context",
+  "type": "object",
+  "required": ["schemaVersion", "instructionFiles", "designEntrypoints", "docsRoots"],
+  "properties": {
+    "schemaVersion": { "type": "integer" },
+    "projectRoot": { "type": ["string", "null"] },
+    "projectRootRealpath": { "type": ["string", "null"] },
+    "docsRoots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "realpath"],
+        "properties": {
+          "path": { "type": "string" },
+          "realpath": { "type": "string" }
+        }
+      }
+    },
+    "instructionFiles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "artifact", "required"],
+        "properties": {
+          "path": { "type": "string" },
+          "artifact": { "type": "string" },
+          "required": { "type": "boolean" }
+        }
+      }
+    },
+    "designEntrypoints": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "relatedRepos": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "changeGoal": { "type": "string" },
+    "nonGoals": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "requiredChecks": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

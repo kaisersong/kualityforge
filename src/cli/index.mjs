@@ -27,6 +27,7 @@ try {
     const artifactRoot = readOption(args, "--artifact-root");
     const runId = readOption(args, "--run-id");
     const profile = readOption(args, "--profile") || "default";
+    const context = readContextOptions(args);
 
     if (!artifactRoot) {
       throw new Error("init requires --artifact-root <path>");
@@ -36,7 +37,7 @@ try {
       throw new Error("init requires --run-id <id>");
     }
 
-    const result = await initializeArtifactRoot(artifactRoot, { runId, profile });
+    const result = await initializeArtifactRoot(artifactRoot, { runId, profile, context });
     console.log(
       JSON.stringify(
         {
@@ -55,6 +56,7 @@ try {
     const artifactRoot = requireOption(args, "--artifact-root", "run");
     const runId = requireOption(args, "--run-id", "run");
     const profile = readOption(args, "--profile") || "default";
+    const context = readContextOptions(args);
     const reviews = readOptions(args, "--review");
     const decision = requireOption(args, "--decision", "run");
     const checks = readOptions(args, "--check");
@@ -67,7 +69,7 @@ try {
       throw new Error("run requires at least one --review <path>");
     }
 
-    await initializeArtifactRoot(artifactRoot, { runId, profile });
+    await initializeArtifactRoot(artifactRoot, { runId, profile, context });
     for (const review of reviews) {
       await writeReviewArtifact(artifactRoot, review);
     }
@@ -209,6 +211,35 @@ function readOptions(args, name) {
   return values;
 }
 
+function readContextOptions(args) {
+  const projectRoot = readOption(args, "--project-root");
+  const docsRoots = readOptions(args, "--docs-root");
+  const qualityPrinciplesPath = readOption(args, "--quality-principles");
+  const changeGoal = readOption(args, "--change-goal");
+  const instructionFiles = readOptions(args, "--instruction");
+  const designEntrypoints = readOptions(args, "--design-entrypoint");
+
+  if (
+    !projectRoot &&
+    docsRoots.length === 0 &&
+    !qualityPrinciplesPath &&
+    !changeGoal &&
+    instructionFiles.length === 0 &&
+    designEntrypoints.length === 0
+  ) {
+    return null;
+  }
+
+  return {
+    projectRoot,
+    docsRoots,
+    qualityPrinciplesPath,
+    changeGoal,
+    instructionFiles,
+    designEntrypoints
+  };
+}
+
 function requireOption(args, name, commandName) {
   const value = readOption(args, name);
   if (!value) {
@@ -230,7 +261,12 @@ async function writeReviewArtifact(artifactRoot, input) {
   reviewers.push({
     runnerId: review.runnerId,
     status: review.status,
-    artifact
+    artifact,
+    contextRead: review.contextRead,
+    contextConfidence: review.contextConfidence,
+    contextGaps: review.contextGaps,
+    contextProvenance: review.contextProvenance,
+    principleAlignment: review.principleAlignment
   });
   reviewers.sort((a, b) => a.runnerId.localeCompare(b.runnerId));
 
@@ -253,7 +289,10 @@ async function writeReviewArtifact(artifactRoot, input) {
 async function synthesizeArtifactRoot(artifactRoot) {
   const { manifest } = await loadManifestFromArtifactRoot(artifactRoot);
   const findings = synthesizeFindings(manifest.findings);
-  const summary = renderSummaryMarkdown({ runId: manifest.runId, findings });
+  const contextGaps = manifest.reviewers
+    .filter((reviewer) => Array.isArray(reviewer.contextGaps) && reviewer.contextGaps.length > 0)
+    .map((reviewer) => ({ runnerId: reviewer.runnerId, gaps: reviewer.contextGaps }));
+  const summary = renderSummaryMarkdown({ runId: manifest.runId, findings, contextGaps });
   const artifact = "summary.md";
   await writeFile(join(artifactRoot, artifact), summary, "utf8");
   await saveManifestToArtifactRoot(artifactRoot, {
@@ -320,8 +359,8 @@ function printHelp() {
   console.log(`KualityForge
 
 Usage:
-  kualityforge init --artifact-root <path> --run-id <id> [--profile <name>]
-  kualityforge run --artifact-root <path> --run-id <id> --review <review.md>... --decision <decision.md> --check <name=status> --verify <verify.md> --verifier-runner-id <id>
+  kualityforge init --artifact-root <path> --run-id <id> [--profile <name>] [--project-root <path>] [--docs-root <path>] [--quality-principles <json>] [--change-goal <text>] [--instruction <path>] [--design-entrypoint <path>]
+  kualityforge run --artifact-root <path> --run-id <id> --review <review.md>... --decision <decision.md> --check <name=status> --verify <verify.md> --verifier-runner-id <id> [--project-root <path>] [--docs-root <path>] [--quality-principles <json>] [--change-goal <text>]
   kualityforge write-review --artifact-root <path> --input <review.md>
   kualityforge synthesize --artifact-root <path>
   kualityforge decide --artifact-root <path> --input <decision.md>

@@ -44,3 +44,60 @@ test("gate --policy applies project-specific reviewer threshold", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("gate --policy enforces required project context", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kualityforge-context-policy-cli-"));
+  try {
+    const manifestPath = join(root, "manifest.json");
+    const policyPath = join(root, ".kualityforge.json");
+
+    await writeFile(
+      manifestPath,
+      JSON.stringify(
+        {
+          runId: "policy-context-run",
+          status: "verified",
+          reviewers: [
+            { runnerId: "codex", artifact: "reviews/codex.md" },
+            { runnerId: "claude", artifact: "reviews/claude.md" }
+          ],
+          humanDecision: { artifact: "decision.md" },
+          verification: { runnerId: "verifier", status: "verified", artifact: "verify.md" },
+          findings: [],
+          requiredChecks: [{ name: "npm test", status: "passed" }]
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
+    await writeFile(
+      policyPath,
+      JSON.stringify(
+        {
+          context: {
+            projectContextRequired: true,
+            qualityPrinciplesRequired: true
+          }
+        },
+        null,
+        2
+      ),
+      "utf8"
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [cliPath, "gate", "--manifest", manifestPath, "--policy", policyPath],
+      { cwd: resolve("."), encoding: "utf8" }
+    );
+
+    assert.equal(result.status, 2, result.stderr);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.status, "incomplete");
+    assert.match(output.reasons.join("\n"), /quality principles artifact is required/);
+    assert.match(output.reasons.join("\n"), /project context artifact is required/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

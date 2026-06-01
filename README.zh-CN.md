@@ -20,9 +20,11 @@ KualityForge 还在项目启动阶段。当前仓库已经包含第一片 determ
 - human decision、required check、verification 的记录命令。
 - 通过 `kualityforge eval` 执行 deterministic eval。
 - 通过 `kualityforge run` 串起本地 artifact workflow。
+- 通过 `kualityforge init --project-root ... --docs-root ... --quality-principles ...` 冻结 context pack。
+- review artifact 支持 context acknowledgement、context provenance、context gaps 和质量原则违背 finding。
 - artifact reference validation 会拒绝绝对路径和 `..` traversal。
 - 对证据不完整的质量运行执行 fail-closed reducer。
-- 覆盖通过、reviewer 不足、manifest 无效、verifier 不独立等 case 的 unit tests。
+- 覆盖通过、reviewer 不足、manifest 无效、verifier 不独立、缺 context、缺 reviewer acknowledgement、context confidence low、未解决 must 原则违背等 case 的 unit tests。
 - 覆盖 artifact-root 初始化、synthesis 输出、eval 和 clean passing run 的 fixture、golden、CI、E2E tests。
 - 通过 `docs -> ../mydocs/kualityforge` 维护项目文档。
 
@@ -67,6 +69,13 @@ KualityForge 把文件作为质量事实来源。review、synthesis、human deci
 ```text
 docs/quality/<run-id>/
   manifest.json
+  context/
+    context-manifest.json
+    quality-principles.json
+    project-context.json
+    project-brief.md
+    docs-index.json
+    instructions/
   reviews/
     codex.md
     claude.md
@@ -78,7 +87,22 @@ docs/quality/<run-id>/
   verify.md
 ```
 
-### 2. Reviewer 可以不确定，Gate 必须确定
+### 2. 用户质量原则高于项目目标
+
+KualityForge 可以在 review 开始前冻结用户质量原则和项目上下文。用户质量原则是跨项目约束；项目目标说明当前项目或当前 change 想做什么。
+
+当两者冲突时，用户质量原则优先。reviewer 不能因为局部项目目标说“尽快 ship”，就放过 must 级用户原则要求的独立验证、多 reviewer 证据或 eval 覆盖。
+
+context pack 记录：
+
+- 用户质量原则。
+- project root 和 docs roots。
+- `AGENTS.md`、`CLAUDE.md`、README 和指定 instruction files。
+- design entrypoints 和 docs index。
+- change goal、non-goals、相关 repo 和 required checks。
+- reviewer acknowledgement 和 context provenance。
+
+### 3. Reviewer 可以不确定，Gate 必须确定
 
 模型 reviewer 可以是概率性的；gate reducer 不可以。
 
@@ -91,7 +115,7 @@ docs/quality/<run-id>/
 - `failed`：存在终态失败或 blocking condition。
 - `invalid_artifact`：manifest 或 artifact shape 不可信。
 
-### 3. Fail Closed
+### 4. Fail Closed
 
 KualityForge 不应该把缺证据解释成通过。release profile 下，以下任一项缺失或无效都不能 passed：
 
@@ -102,10 +126,13 @@ KualityForge 不应该把缺证据解释成通过。release profile 下，以下
 - 独立 verifier identity。
 - 合法 manifest shape。
 - finding resolution status。
+- policy 要求的项目 context 和用户质量原则。
+- reviewer 对必读 context 的 acknowledgement。
+- policy 要求的 context provenance 匹配。
 
 这是有意的偏置。一个偶尔阻断过多的质量门禁可以调参；一个默默放过不完整证据的门禁不能被信任。
 
-### 4. Human Decision 是修复边界
+### 5. Human Decision 是修复边界
 
 AI reviewer 可以发现问题，但不应该单方面决定改什么。KualityForge 保持一条硬边界：
 
@@ -116,13 +143,13 @@ AI reviewer 可以发现问题，但不应该单方面决定改什么。KualityF
 
 这让人类判断保留在关键位置，同时把 review、fix 和 verify 的证据链自动化。
 
-### 5. 独立验证
+### 6. 独立验证
 
 release profile 下，fixer 和 verifier 必须是不同 runner identity。一个模型或 agent 不应该既修复问题，又作为唯一证据证明自己的修复有效。
 
 第一版在 manifest 层检查这个约束。后续接入 KSwarm 后，会在 workflow scheduling 层也强制执行。
 
-### 6. KSwarm 编排，KualityForge 判门禁
+### 7. KSwarm 编排，KualityForge 判门禁
 
 KualityForge 不持有 durable workflow execution。这个职责属于 KSwarm。
 
@@ -135,7 +162,7 @@ KualityForge 不持有 durable workflow execution。这个职责属于 KSwarm。
 
 这样 gate core 才能在 xiaok 之外、KSwarm 之外也能独立使用。
 
-### 7. Eval 是产品的一部分
+### 8. Eval 是产品的一部分
 
 KualityForge 自己必须被测试和评估。质量门禁系统不能只靠几次真实项目跑通来证明可靠。
 
@@ -165,6 +192,9 @@ kualityforge/
   schemas/
     manifest.schema.json
     policy.schema.json
+    context-manifest.schema.json
+    project-context.schema.json
+    quality-principles.schema.json
   tests/
     kualityforge/
       unit/
@@ -196,6 +226,20 @@ npm test
 
 ```bash
 node src/cli/index.mjs gate --manifest path/to/manifest.json
+```
+
+初始化一个带冻结项目上下文的 run：
+
+```bash
+node src/cli/index.mjs init \
+  --artifact-root docs/quality/<run-id> \
+  --run-id <run-id> \
+  --project-root /path/to/project \
+  --docs-root /path/to/docs \
+  --quality-principles /path/to/quality-principles.json \
+  --change-goal "按声明的质量 profile 评审本次 release" \
+  --instruction AGENTS.md \
+  --instruction CLAUDE.md
 ```
 
 本地 link 后：

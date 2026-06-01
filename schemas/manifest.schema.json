@@ -35,8 +35,41 @@
         "properties": {
           "runnerId": { "type": "string" },
           "status": { "type": "string" },
-          "artifact": { "type": "string" }
+          "artifact": { "type": "string" },
+          "contextRead": {
+            "type": "object",
+            "additionalProperties": { "type": "boolean" }
+          },
+          "contextConfidence": {
+            "type": "string",
+            "enum": ["high", "medium", "low"]
+          },
+          "contextGaps": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "contextProvenance": {
+            "type": "object",
+            "properties": {
+              "contextManifestHash": { "type": "string" },
+              "promptContextHash": { "type": "string" }
+            }
+          },
+          "principleAlignment": {
+            "type": "object",
+            "additionalProperties": { "type": "string" }
+          }
         }
+      }
+    },
+    "context": {
+      "type": "object",
+      "properties": {
+        "contextManifest": { "$ref": "#/$defs/artifactReference" },
+        "qualityPrinciples": { "$ref": "#/$defs/artifactReference" },
+        "projectContext": { "$ref": "#/$defs/artifactReference" },
+        "projectBrief": { "$ref": "#/$defs/artifactReference" },
+        "docsIndex": { "$ref": "#/$defs/artifactReference" }
       }
     },
     "humanDecision": {
@@ -76,6 +109,9 @@
         "required": ["id", "status"],
         "properties": {
           "id": { "type": "string" },
+          "type": { "type": "string" },
+          "principleId": { "type": ["string", "null"] },
+          "priority": { "type": ["string", "null"] },
           "title": { "type": "string" },
           "status": { "type": "string" },
           "severity": { "type": "string" },
@@ -99,6 +135,19 @@
           "status": { "type": "string" },
           "command": { "type": "string" },
           "log": { "type": "string" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "artifactReference": {
+      "type": "object",
+      "required": ["artifact", "sha256"],
+      "properties": {
+        "artifact": { "type": "string" },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
         }
       }
     }

@@ -9,6 +9,41 @@
     "requireHumanDecision": { "type": "boolean" },
     "requireRequiredChecks": { "type": "boolean" },
     "requireIndependentVerifier": { "type": "boolean" },
+    "context": {
+      "type": "object",
+      "properties": {
+        "projectContextRequired": { "type": "boolean" },
+        "qualityPrinciplesRequired": { "type": "boolean" },
+        "requiredReviewerContextAck": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "requireReviewerContextProvenance": { "type": "boolean" },
+        "requiredInstructionFiles": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "optionalInstructionFiles": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "docsRoots": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "designEntrypoints": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "qualityPrinciples": {
+      "type": "object",
+      "properties": {
+        "path": { "type": "string" },
+        "mustPrincipleExceptionPolicy": { "type": "string" }
+      }
+    },
     "artifactRoot": { "type": "string" }
   }
 }

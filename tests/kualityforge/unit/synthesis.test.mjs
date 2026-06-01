@@ -46,3 +46,34 @@ test("renderSummaryMarkdown writes a human decision checklist", () => {
   assert.match(markdown, /- \[ \] QF-001/);
   assert.match(markdown, /Reviewers: codex, claude/);
 });
+
+test("renderSummaryMarkdown highlights context gaps and quality principle violations", () => {
+  const markdown = renderSummaryMarkdown({
+    runId: "run-context",
+    contextGaps: [
+      {
+        runnerId: "claude",
+        gaps: ["docs root was not provided"]
+      }
+    ],
+    findings: [
+      {
+        id: "QF-PRINCIPLE-001",
+        type: "quality_principle_violation",
+        principleId: "eval-backed-gate",
+        priority: "must",
+        title: "Missing eval coverage",
+        severity: "blocker",
+        status: "open",
+        reviewerCount: 1,
+        sourceRunnerIds: ["claude"]
+      }
+    ]
+  });
+
+  assert.match(markdown, /## Context Gaps/);
+  assert.match(markdown, /claude: docs root was not provided/);
+  assert.match(markdown, /## Quality Principle Violations/);
+  assert.match(markdown, /Principle: eval-backed-gate/);
+  assert.match(markdown, /Priority: must/);
+});

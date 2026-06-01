@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -45,6 +45,34 @@ test("initializeArtifactRoot writes manifest and expected directories", async ()
 
     await readFile(join(root, "reviews", ".gitkeep"), "utf8");
     await readFile(join(root, "checks", ".gitkeep"), "utf8");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("initializeArtifactRoot can attach a frozen context pack", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kualityforge-context-root-"));
+  const projectRoot = join(root, "project");
+  const artifactRoot = join(root, "artifacts");
+  try {
+    await mkdir(projectRoot, { recursive: true });
+    await initializeArtifactRoot(artifactRoot, {
+      runId: "release-with-context",
+      profile: "release",
+      createdAt: "2026-06-02T00:00:00.000Z",
+      context: {
+        projectRoot,
+        changeGoal: "Review with project context"
+      }
+    });
+
+    const manifest = JSON.parse(await readFile(join(artifactRoot, "manifest.json"), "utf8"));
+    assert.equal(manifest.context.projectContext.artifact, "context/project-context.json");
+    assert.equal(manifest.context.projectBrief.artifact, "context/project-brief.md");
+    assert.match(manifest.context.contextManifest.sha256, /^[a-f0-9]{64}$/);
+
+    const brief = await readFile(join(artifactRoot, "context", "project-brief.md"), "utf8");
+    assert.match(brief, /Review with project context/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

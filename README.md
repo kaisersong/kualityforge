@@ -20,9 +20,11 @@ KualityForge is in its bootstrap phase. The repository currently contains the fi
 - Human decision, required check, and verification recording commands.
 - Deterministic eval through `kualityforge eval`.
 - Local artifact workflow through `kualityforge run`.
+- Context pack freezing through `kualityforge init --project-root ... --docs-root ... --quality-principles ...`.
+- Review artifact context acknowledgement, context provenance, context gaps, and quality principle violation parsing.
 - Artifact reference validation rejects absolute paths and `..` traversal.
 - Fail-closed reducer behavior for incomplete quality evidence.
-- Unit tests for pass, reviewer shortage, invalid manifest, and non-independent verifier cases.
+- Unit tests for pass, reviewer shortage, invalid manifest, non-independent verifier, missing context, missing reviewer acknowledgement, low context confidence, and unresolved must-principle cases.
 - Fixture, golden, CI, and E2E tests for artifact-root initialization, synthesis output, eval, and a clean passing run.
 - Project docs via `docs -> ../mydocs/kualityforge`.
 
@@ -67,6 +69,13 @@ The intended artifact set is:
 ```text
 docs/quality/<run-id>/
   manifest.json
+  context/
+    context-manifest.json
+    quality-principles.json
+    project-context.json
+    project-brief.md
+    docs-index.json
+    instructions/
   reviews/
     codex.md
     claude.md
@@ -78,7 +87,22 @@ docs/quality/<run-id>/
   verify.md
 ```
 
-### 2. Deterministic Gate, Non-Deterministic Reviewers
+### 2. User Principles Above Project Goals
+
+KualityForge can freeze user quality principles and project context before review starts. User quality principles are cross-project constraints; project goals explain what this project or change is trying to do.
+
+When they conflict, user quality principles win. A reviewer cannot pass a release just because the local project goal says "ship quickly" if a must-level user principle requires independent verification, multi-reviewer evidence, or eval coverage.
+
+The context pack captures:
+
+- User quality principles.
+- Project root and docs roots.
+- `AGENTS.md`, `CLAUDE.md`, README, and selected instruction files.
+- Design entrypoints and docs index.
+- Change goal, non-goals, related repos, and required checks.
+- Reviewer acknowledgement and context provenance.
+
+### 3. Deterministic Gate, Non-Deterministic Reviewers
 
 Model reviewers are allowed to be probabilistic. The gate reducer is not.
 
@@ -91,7 +115,7 @@ Current gate statuses are intentionally conservative:
 - `failed`: a terminal failure or blocking condition exists.
 - `invalid_artifact`: the manifest or artifact shape cannot be trusted.
 
-### 3. Fail Closed
+### 4. Fail Closed
 
 KualityForge should never turn missing evidence into success. Release-style profiles fail closed when any of these are missing or invalid:
 
@@ -102,10 +126,13 @@ KualityForge should never turn missing evidence into success. Release-style prof
 - Independent verifier identity.
 - Valid manifest shape.
 - Resolved finding status.
+- Required project context and user quality principles when policy requires them.
+- Reviewer acknowledgement of required context.
+- Matching context provenance when policy requires it.
 
 This is a deliberate bias. A quality gate that occasionally blocks too much can be tuned; a gate that silently passes incomplete evidence cannot be trusted.
 
-### 4. Human Decision Is the Fix Boundary
+### 5. Human Decision Is the Fix Boundary
 
 AI reviewers can find issues, but they should not decide unilaterally what gets changed. KualityForge keeps a hard boundary:
 
@@ -116,13 +143,13 @@ AI reviewers can find issues, but they should not decide unilaterally what gets 
 
 This preserves human judgment while still making review and verification automatable.
 
-### 5. Independent Verification
+### 6. Independent Verification
 
 For release profiles, the fixer and verifier must be different runner identities. A model or agent should not be allowed to fix a problem and then certify its own fix as the only evidence.
 
 The first implementation enforces this at manifest level. Later KSwarm integration will enforce it at workflow scheduling level.
 
-### 6. KSwarm as Orchestrator, KualityForge as Gate Core
+### 7. KSwarm as Orchestrator, KualityForge as Gate Core
 
 KualityForge does not own durable workflow execution. That belongs in KSwarm.
 
@@ -135,7 +162,7 @@ The boundary is:
 
 This keeps the gate core usable outside xiaok and outside KSwarm.
 
-### 7. Eval Is Part of the Product
+### 8. Eval Is Part of the Product
 
 KualityForge itself must be tested and evaluated. A quality gate system cannot rely on a few successful real-world runs as proof.
 
@@ -165,6 +192,9 @@ kualityforge/
   schemas/
     manifest.schema.json
     policy.schema.json
+    context-manifest.schema.json
+    project-context.schema.json
+    quality-principles.schema.json
   tests/
     kualityforge/
       unit/
@@ -196,6 +226,20 @@ Run the current gate CLI against a manifest:
 
 ```bash
 node src/cli/index.mjs gate --manifest path/to/manifest.json
+```
+
+Initialize a run with frozen project context:
+
+```bash
+node src/cli/index.mjs init \
+  --artifact-root docs/quality/<run-id> \
+  --run-id <run-id> \
+  --project-root /path/to/project \
+  --docs-root /path/to/docs \
+  --quality-principles /path/to/quality-principles.json \
+  --change-goal "Review this release against the declared quality profile" \
+  --instruction AGENTS.md \
+  --instruction CLAUDE.md
 ```
 
 After linking the package locally:

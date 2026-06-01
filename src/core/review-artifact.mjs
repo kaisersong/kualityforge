@@ -18,9 +18,17 @@ export function parseReviewArtifact(markdown) {
   return {
     runnerId: review.runnerId,
     status: review.status || "completed",
+    contextRead: review.contextRead || {},
+    contextConfidence: review.contextConfidence || "medium",
+    contextGaps: Array.isArray(review.contextGaps) ? review.contextGaps : [],
+    contextProvenance: review.contextProvenance || {},
+    principleAlignment: review.principleAlignment || {},
     findings: review.findings.map((finding, index) => {
       return {
         id: finding.id || `QF-${String(index + 1).padStart(3, "0")}`,
+        type: finding.type || "code",
+        principleId: finding.principleId || null,
+        priority: finding.priority || null,
         title: finding.title || finding.id || `Finding ${index + 1}`,
         severity: finding.severity || "warning",
         status: finding.status || "open",

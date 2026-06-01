@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kualityforge.local/schemas/quality-principles.schema.json",
+  "title": "KualityForge User Quality Principles",
+  "type": "object",
+  "required": ["schemaVersion", "scope", "principles"],
+  "properties": {
+    "schemaVersion": { "type": "integer" },
+    "scope": { "type": "string" },
+    "required": { "type": "boolean" },
+    "principles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "priority", "statement", "appliesTo", "failureMode"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "priority": {
+            "type": "string",
+            "enum": ["must", "should", "prefer"]
+          },
+          "statement": { "type": "string", "minLength": 1 },
+          "appliesTo": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "failureMode": { "type": "string", "minLength": 1 },
+          "evidenceRequired": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

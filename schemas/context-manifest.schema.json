@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kualityforge.local/schemas/context-manifest.schema.json",
+  "title": "KualityForge Context Manifest",
+  "type": "object",
+  "required": ["schemaVersion", "generatedAt", "files"],
+  "properties": {
+    "schemaVersion": { "type": "integer" },
+    "generatedAt": { "type": "string" },
+    "files": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["artifact", "sha256"],
+        "properties": {
+          "artifact": { "type": "string" },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{64}$"
+          }
+        }
+      }
+    }
+  }
+}

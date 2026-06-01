@@ -111,5 +111,162 @@
       "requiredChecks": [{ "name": "npm test", "status": "passed" }]
     },
     "expected": { "status": "incomplete", "exitCode": 2 }
+  },
+  {
+    "name": "missing required context pack blocks release policy",
+    "policy": {
+      "context": {
+        "projectContextRequired": true,
+        "qualityPrinciplesRequired": true
+      }
+    },
+    "manifest": {
+      "runId": "eval-missing-context-pack",
+      "status": "verified",
+      "reviewers": [
+        { "runnerId": "codex:gpt-5", "artifact": "reviews/codex.md" },
+        { "runnerId": "claude:sonnet", "artifact": "reviews/claude.md" }
+      ],
+      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "verified",
+        "artifact": "verify.md"
+      },
+      "findings": [],
+      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+    },
+    "expected": { "status": "incomplete", "exitCode": 2 }
+  },
+  {
+    "name": "reviewer missing quality principles acknowledgement blocks release",
+    "policy": {
+      "context": {
+        "projectContextRequired": true,
+        "qualityPrinciplesRequired": true,
+        "requiredReviewerContextAck": ["user_quality_principles", "project_brief"]
+      }
+    },
+    "manifest": {
+      "runId": "eval-missing-context-ack",
+      "status": "verified",
+      "context": {
+        "contextManifest": { "artifact": "context/context-manifest.json", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+        "qualityPrinciples": { "artifact": "context/quality-principles.json", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+        "projectContext": { "artifact": "context/project-context.json", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" },
+        "projectBrief": { "artifact": "context/project-brief.md", "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" }
+      },
+      "reviewers": [
+        {
+          "runnerId": "codex:gpt-5",
+          "artifact": "reviews/codex.md",
+          "contextRead": { "project_brief": true }
+        },
+        {
+          "runnerId": "claude:sonnet",
+          "artifact": "reviews/claude.md",
+          "contextRead": { "user_quality_principles": true, "project_brief": true }
+        }
+      ],
+      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "verified",
+        "artifact": "verify.md"
+      },
+      "findings": [],
+      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+    },
+    "expected": { "status": "incomplete", "exitCode": 2 }
+  },
+  {
+    "name": "user quality principle must violation blocks release even when risk accepted",
+    "policy": {
+      "context": {
+        "projectContextRequired": true,
+        "qualityPrinciplesRequired": true
+      }
+    },
+    "manifest": {
+      "runId": "eval-must-principle-violation",
+      "status": "verified",
+      "context": {
+        "contextManifest": { "artifact": "context/context-manifest.json", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+        "qualityPrinciples": { "artifact": "context/quality-principles.json", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+        "projectContext": { "artifact": "context/project-context.json", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" },
+        "projectBrief": { "artifact": "context/project-brief.md", "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" }
+      },
+      "reviewers": [
+        { "runnerId": "codex:gpt-5", "artifact": "reviews/codex.md" },
+        { "runnerId": "claude:sonnet", "artifact": "reviews/claude.md" }
+      ],
+      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "verified",
+        "artifact": "verify.md"
+      },
+      "findings": [
+        {
+          "id": "QF-PRINCIPLE-001",
+          "type": "quality_principle_violation",
+          "priority": "must",
+          "principleId": "independent-verification",
+          "status": "risk_accepted"
+        }
+      ],
+      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+    },
+    "expected": { "status": "incomplete", "exitCode": 2 }
+  },
+  {
+    "name": "shared wrong brief cannot pass without matching context provenance",
+    "policy": {
+      "context": {
+        "projectContextRequired": true,
+        "qualityPrinciplesRequired": true,
+        "requiredReviewerContextAck": ["user_quality_principles", "project_brief"],
+        "requireReviewerContextProvenance": true
+      }
+    },
+    "manifest": {
+      "runId": "eval-shared-wrong-brief",
+      "status": "verified",
+      "context": {
+        "contextManifest": { "artifact": "context/context-manifest.json", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
+        "qualityPrinciples": { "artifact": "context/quality-principles.json", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+        "projectContext": { "artifact": "context/project-context.json", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" },
+        "projectBrief": { "artifact": "context/project-brief.md", "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" }
+      },
+      "reviewers": [
+        {
+          "runnerId": "codex:gpt-5",
+          "artifact": "reviews/codex.md",
+          "contextRead": { "user_quality_principles": true, "project_brief": true },
+          "contextProvenance": {
+            "contextManifestHash": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+            "promptContextHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          }
+        },
+        {
+          "runnerId": "claude:sonnet",
+          "artifact": "reviews/claude.md",
+          "contextRead": { "user_quality_principles": true, "project_brief": true },
+          "contextProvenance": {
+            "contextManifestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "promptContextHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+          }
+        }
+      ],
+      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "verified",
+        "artifact": "verify.md"
+      },
+      "findings": [],
+      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+    },
+    "expected": { "status": "incomplete", "exitCode": 2 }
   }
 ]

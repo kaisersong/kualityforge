@@ -19,7 +19,7 @@ test("eval --report writes deterministic eval output", async () => {
     assert.equal(result.status, 0, result.stderr);
     const report = JSON.parse(await readFile(reportPath, "utf8"));
     assert.equal(report.status, "passed");
-    assert.equal(report.total, 6);
+    assert.equal(report.total, 10);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

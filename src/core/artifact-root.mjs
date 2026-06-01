@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { buildContextPack } from "./context-pack.mjs";
 
 export const MANIFEST_FILE = "manifest.json";
 
@@ -31,7 +32,15 @@ export async function initializeArtifactRoot(artifactRoot, options) {
   await writeFile(join(artifactRoot, "reviews", ".gitkeep"), "", "utf8");
   await writeFile(join(artifactRoot, "checks", ".gitkeep"), "", "utf8");
 
-  const manifest = createInitialManifest(options);
+  let context = null;
+  if (options.context) {
+    context = (await buildContextPack(artifactRoot, options.context)).artifacts;
+  }
+
+  const manifest = {
+    ...createInitialManifest(options),
+    ...(context ? { context } : {})
+  };
   const manifestPath = join(artifactRoot, MANIFEST_FILE);
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 

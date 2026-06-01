@@ -38,12 +38,37 @@ export function synthesizeFindings(findings) {
   });
 }
 
-export function renderSummaryMarkdown({ runId, findings }) {
+export function renderSummaryMarkdown({ runId, findings, contextGaps = [] }) {
   const lines = [`# KualityForge Summary: ${runId}`, ""];
+
+  if (contextGaps.length > 0) {
+    lines.push("## Context Gaps", "");
+    for (const item of contextGaps) {
+      for (const gap of item.gaps || []) {
+        lines.push(`- ${item.runnerId}: ${gap}`);
+      }
+    }
+    lines.push("");
+  }
 
   if (findings.length === 0) {
     lines.push("No findings were reported by required reviewers.", "");
     return `${lines.join("\n")}\n`;
+  }
+
+  const principleViolations = findings.filter(
+    (finding) => finding.type === "quality_principle_violation"
+  );
+  if (principleViolations.length > 0) {
+    lines.push("## Quality Principle Violations", "");
+    for (const finding of principleViolations) {
+      lines.push(`- ${finding.id} ${finding.title}`);
+      lines.push(`  - Principle: ${finding.principleId || "unknown"}`);
+      lines.push(`  - Priority: ${finding.priority || "unspecified"}`);
+      lines.push(`  - Severity: ${finding.severity}`);
+      lines.push(`  - Status: ${finding.status}`);
+    }
+    lines.push("");
   }
 
   lines.push("## Findings", "");

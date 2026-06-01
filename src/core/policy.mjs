@@ -5,7 +5,11 @@ export function normalizePolicy(policy = {}) {
   return {
     profile: policy.profile || "release",
     ...DEFAULT_RELEASE_POLICY,
-    ...policy
+    ...policy,
+    context: {
+      ...DEFAULT_RELEASE_POLICY.context,
+      ...(policy.context || {})
+    }
   };
 }
 

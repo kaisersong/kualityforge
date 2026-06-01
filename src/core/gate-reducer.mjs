@@ -2,7 +2,13 @@ export const DEFAULT_RELEASE_POLICY = Object.freeze({
   minReviewers: 2,
   requireHumanDecision: true,
   requireRequiredChecks: true,
-  requireIndependentVerifier: true
+  requireIndependentVerifier: true,
+  context: Object.freeze({
+    projectContextRequired: false,
+    qualityPrinciplesRequired: false,
+    requiredReviewerContextAck: Object.freeze([]),
+    requireReviewerContextProvenance: false
+  })
 });
 
 const TERMINAL_FAILURE_STATUSES = new Set([
@@ -38,7 +44,7 @@ export function validateManifestShape(manifest) {
     errors.push("requiredChecks must be an array");
   }
 
-  return [...errors, ...validateArtifactReferences(manifest)];
+  return [...errors, ...validateArtifactReferences(manifest), ...validateContextArtifacts(manifest)];
 }
 
 export function validateArtifactReferences(manifest) {
@@ -78,6 +84,37 @@ export function validateArtifactReferences(manifest) {
   return errors;
 }
 
+function validateContextArtifacts(manifest) {
+  const errors = [];
+  const context = manifest.context;
+  if (!context) {
+    return errors;
+  }
+
+  for (const key of [
+    "contextManifest",
+    "qualityPrinciples",
+    "projectContext",
+    "projectBrief",
+    "docsIndex"
+  ]) {
+    const item = context[key];
+    if (!item) {
+      continue;
+    }
+
+    if (item.artifact && !isSafeArtifactPath(item.artifact)) {
+      errors.push(`context.${key}.artifact must stay within artifact root`);
+    }
+
+    if (item.sha256 && !isSha256HexDigest(item.sha256)) {
+      errors.push(`context.${key}.sha256 must be a sha256 hex digest`);
+    }
+  }
+
+  return errors;
+}
+
 function isSafeArtifactPath(value) {
   if (typeof value !== "string" || value.length === 0) {
     return false;
@@ -87,6 +124,7 @@ function isSafeArtifactPath(value) {
 }
 
 export function reduceQualityGate(manifest, policy = DEFAULT_RELEASE_POLICY) {
+  const effectivePolicy = mergePolicy(policy);
   const shapeErrors = validateManifestShape(manifest);
   if (shapeErrors.length > 0) {
     return failure("invalid_artifact", shapeErrors);
@@ -99,13 +137,13 @@ export function reduceQualityGate(manifest, policy = DEFAULT_RELEASE_POLICY) {
   const blockers = [];
   const reviewerCount = manifest.reviewers.length;
 
-  if (reviewerCount < policy.minReviewers) {
+  if (reviewerCount < effectivePolicy.minReviewers) {
     blockers.push(
-      `reviewer shortage: expected at least ${policy.minReviewers}, got ${reviewerCount}`
+      `reviewer shortage: expected at least ${effectivePolicy.minReviewers}, got ${reviewerCount}`
     );
   }
 
-  if (policy.requireHumanDecision && !manifest.humanDecision) {
+  if (effectivePolicy.requireHumanDecision && !manifest.humanDecision) {
     blockers.push("human decision artifact is required");
   }
 
@@ -118,7 +156,22 @@ export function reduceQualityGate(manifest, policy = DEFAULT_RELEASE_POLICY) {
     blockers.push(`unresolved findings: ${openFindings.map((f) => f.id).join(", ")}`);
   }
 
-  if (policy.requireRequiredChecks) {
+  const unresolvedMustPrincipleViolations = manifest.findings.filter((finding) => {
+    return (
+      finding.type === "quality_principle_violation" &&
+      finding.priority === "must" &&
+      !["verified", "resolved"].includes(finding.status)
+    );
+  });
+  if (unresolvedMustPrincipleViolations.length > 0) {
+    blockers.push(
+      `unresolved must quality principle violations: ${unresolvedMustPrincipleViolations
+        .map((finding) => finding.id)
+        .join(", ")}`
+    );
+  }
+
+  if (effectivePolicy.requireRequiredChecks) {
     const failedChecks = manifest.requiredChecks.filter((check) => check.status !== "passed");
     if (failedChecks.length > 0) {
       blockers.push(`required checks not passed: ${failedChecks.map((c) => c.name).join(", ")}`);
@@ -132,13 +185,15 @@ export function reduceQualityGate(manifest, policy = DEFAULT_RELEASE_POLICY) {
   }
 
   if (
-    policy.requireIndependentVerifier &&
+    effectivePolicy.requireIndependentVerifier &&
     manifest.verification &&
     manifest.fixer &&
     manifest.verification.runnerId === manifest.fixer.runnerId
   ) {
     blockers.push("verifier runner must be independent from fixer runner");
   }
+
+  blockers.push(...contextBlockers(manifest, effectivePolicy.context));
 
   if (blockers.length > 0) {
     return {
@@ -153,6 +208,70 @@ export function reduceQualityGate(manifest, policy = DEFAULT_RELEASE_POLICY) {
     exitCode: 0,
     reasons: []
   };
+}
+
+function contextBlockers(manifest, contextPolicy) {
+  const blockers = [];
+  const context = manifest.context;
+
+  if (contextPolicy.qualityPrinciplesRequired && !context?.qualityPrinciples) {
+    blockers.push("quality principles artifact is required");
+  }
+
+  if (contextPolicy.projectContextRequired && !context?.projectContext) {
+    blockers.push("project context artifact is required");
+  }
+
+  if (contextPolicy.projectContextRequired && !context?.projectBrief) {
+    blockers.push("project brief artifact is required");
+  }
+
+  const requiredAck = contextPolicy.requiredReviewerContextAck || [];
+  if (requiredAck.length > 0) {
+    for (const reviewer of manifest.reviewers) {
+      const missing = requiredAck.filter((key) => reviewer.contextRead?.[key] !== true);
+      if (missing.length > 0) {
+        blockers.push(
+          `reviewer ${reviewer.runnerId} did not acknowledge context: ${missing.join(", ")}`
+        );
+      }
+    }
+  }
+
+  for (const reviewer of manifest.reviewers) {
+    if (reviewer.contextConfidence === "low") {
+      blockers.push(`reviewer ${reviewer.runnerId} context confidence is low`);
+    }
+
+    if (contextPolicy.requireReviewerContextProvenance) {
+      const expectedHash = context?.contextManifest?.sha256;
+      const actualHash = reviewer.contextProvenance?.contextManifestHash;
+      if (!actualHash) {
+        blockers.push(`reviewer ${reviewer.runnerId} context provenance is required`);
+      } else if (expectedHash && actualHash !== expectedHash) {
+        blockers.push(
+          `reviewer ${reviewer.runnerId} context provenance does not match context manifest`
+        );
+      }
+    }
+  }
+
+  return blockers;
+}
+
+function mergePolicy(policy) {
+  return {
+    ...DEFAULT_RELEASE_POLICY,
+    ...policy,
+    context: {
+      ...DEFAULT_RELEASE_POLICY.context,
+      ...(policy.context || {})
+    }
+  };
+}
+
+function isSha256HexDigest(value) {
+  return typeof value === "string" && /^[a-f0-9]{64}$/i.test(value);
 }
 
 function failure(status, reasons) {
