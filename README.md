@@ -19,12 +19,14 @@ KualityFore is in its bootstrap phase. The repository currently contains the fir
 - Summary generation through `kualityfore synthesize`.
 - Human decision, required check, and verification recording commands.
 - Deterministic eval through `kualityfore eval`.
+- Local artifact workflow through `kualityfore run`.
+- Artifact reference validation rejects absolute paths and `..` traversal.
 - Fail-closed reducer behavior for incomplete quality evidence.
 - Unit tests for pass, reviewer shortage, invalid manifest, and non-independent verifier cases.
 - Fixture, golden, CI, and E2E tests for artifact-root initialization, synthesis output, eval, and a clean passing run.
 - Project docs via `docs -> ../mydocs/kualityfore`.
 
-The live multi-agent workflow, artifact writer, synthesis engine, KSwarm integration, and eval corpus are intentionally staged after the deterministic core.
+Live multi-agent runner dispatch and KSwarm orchestration are intentionally staged after the deterministic core. The local `run` command consumes already-created artifacts; it does not call models.
 
 ---
 
@@ -240,6 +242,7 @@ Currently implemented:
 
 ```bash
 kualityfore init --artifact-root <path> --run-id <id> [--profile <name>]
+kualityfore run --artifact-root <path> --run-id <id> --review <review.md>... --decision <decision.md> --check <name=status> --verify <verify.md> --verifier-runner-id <id>
 kualityfore write-review --artifact-root <path> --input <review.md>
 kualityfore synthesize --artifact-root <path>
 kualityfore decide --artifact-root <path> --input <decision.md>
@@ -247,13 +250,16 @@ kualityfore record-check --artifact-root <path> --name <name> --status <status>
 kualityfore verify --artifact-root <path> --runner-id <id> --status <status> --input <verify.md>
 kualityfore gate --manifest <path>
 kualityfore gate --artifact-root <path>
-kualityfore eval [--corpus <dir>]
+kualityfore eval [--corpus <dir>] [--report <path>]
 ```
 
 Planned public commands:
 
 ```bash
-kualityfore run
+kualityfore run --workflow kswarm
+kualityfore adapter codex
+kualityfore adapter claude
+kualityfore adapter xiaok
 ```
 
 Planned test commands:
@@ -293,6 +299,21 @@ kualityfore run \
 Codex should not claim a full KualityFore gate pass unless the multi-agent artifact chain is complete: independent reviews, synthesis, human decision, approved-only fix, required checks, and independent verification.
 
 A single Codex run can be recorded as a baseline, but it is not a completed multi-agent gate.
+
+For local artifacts that already exist, Codex can run a deterministic local workflow today:
+
+```bash
+kualityfore run \
+  --artifact-root docs/quality/<run-id> \
+  --run-id <run-id> \
+  --profile release \
+  --review codex-review.md \
+  --review claude-review.md \
+  --decision decision.md \
+  --check "npm test=passed" \
+  --verify verify.md \
+  --verifier-runner-id claude:verifier
+```
 
 ---
 

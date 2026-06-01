@@ -5,7 +5,9 @@
   "type": "object",
   "required": ["runId", "status", "reviewers", "findings", "requiredChecks"],
   "properties": {
+    "schemaVersion": { "type": "string" },
     "runId": { "type": "string", "minLength": 1 },
+    "createdAt": { "type": "string" },
     "status": {
       "type": "string",
       "enum": [
@@ -32,6 +34,7 @@
         "required": ["runnerId", "artifact"],
         "properties": {
           "runnerId": { "type": "string" },
+          "status": { "type": "string" },
           "artifact": { "type": "string" }
         }
       }
@@ -40,7 +43,8 @@
       "type": "object",
       "properties": {
         "artifact": { "type": "string" },
-        "owner": { "type": "string" }
+        "owner": { "type": "string" },
+        "status": { "type": "string" }
       }
     },
     "fixer": {
@@ -48,6 +52,13 @@
       "properties": {
         "runnerId": { "type": "string" },
         "artifact": { "type": "string" }
+      }
+    },
+    "synthesis": {
+      "type": "object",
+      "properties": {
+        "artifact": { "type": "string" },
+        "status": { "type": "string" }
       }
     },
     "verification": {
@@ -65,8 +76,16 @@
         "required": ["id", "status"],
         "properties": {
           "id": { "type": "string" },
+          "title": { "type": "string" },
           "status": { "type": "string" },
-          "severity": { "type": "string" }
+          "severity": { "type": "string" },
+          "duplicateKey": { "type": "string" },
+          "sourceRunnerId": { "type": "string" },
+          "sourceRunnerIds": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "reviewerCount": { "type": "integer", "minimum": 0 }
         }
       }
     },

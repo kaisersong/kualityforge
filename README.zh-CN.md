@@ -19,12 +19,14 @@ KualityFore 还在项目启动阶段。当前仓库已经包含第一片 determi
 - 通过 `kualityfore synthesize` 生成 summary。
 - human decision、required check、verification 的记录命令。
 - 通过 `kualityfore eval` 执行 deterministic eval。
+- 通过 `kualityfore run` 串起本地 artifact workflow。
+- artifact reference validation 会拒绝绝对路径和 `..` traversal。
 - 对证据不完整的质量运行执行 fail-closed reducer。
 - 覆盖通过、reviewer 不足、manifest 无效、verifier 不独立等 case 的 unit tests。
 - 覆盖 artifact-root 初始化、synthesis 输出、eval 和 clean passing run 的 fixture、golden、CI、E2E tests。
 - 通过 `docs -> ../mydocs/kualityfore` 维护项目文档。
 
-真实多 Agent workflow、artifact writer、synthesis engine、KSwarm 集成和 eval corpus 会在 deterministic core 稳定后再接入。
+真实多 Agent runner dispatch 和 KSwarm 编排会在 deterministic core 之后接入。当前本地 `run` 命令只消费已经生成的 artifacts，不调用模型。
 
 ---
 
@@ -240,6 +242,7 @@ kualityfore gate --manifest path/to/manifest.json
 
 ```bash
 kualityfore init --artifact-root <path> --run-id <id> [--profile <name>]
+kualityfore run --artifact-root <path> --run-id <id> --review <review.md>... --decision <decision.md> --check <name=status> --verify <verify.md> --verifier-runner-id <id>
 kualityfore write-review --artifact-root <path> --input <review.md>
 kualityfore synthesize --artifact-root <path>
 kualityfore decide --artifact-root <path> --input <decision.md>
@@ -247,13 +250,16 @@ kualityfore record-check --artifact-root <path> --name <name> --status <status>
 kualityfore verify --artifact-root <path> --runner-id <id> --status <status> --input <verify.md>
 kualityfore gate --manifest <path>
 kualityfore gate --artifact-root <path>
-kualityfore eval [--corpus <dir>]
+kualityfore eval [--corpus <dir>] [--report <path>]
 ```
 
 计划中的公开命令：
 
 ```bash
-kualityfore run
+kualityfore run --workflow kswarm
+kualityfore adapter codex
+kualityfore adapter claude
+kualityfore adapter xiaok
 ```
 
 计划中的测试命令：
@@ -293,6 +299,21 @@ kualityfore run \
 Codex 不能在只有单 runner 的情况下宣称完整 KualityFore gate passed。只有独立 reviews、synthesis、human decision、approved-only fix、required checks 和 independent verification 都闭环，才能算完整 gate。
 
 单次 Codex 运行可以记录为 baseline，但不是完成的 multi-agent gate。
+
+如果本地 artifacts 已经存在，Codex 今天可以直接跑 deterministic local workflow：
+
+```bash
+kualityfore run \
+  --artifact-root docs/quality/<run-id> \
+  --run-id <run-id> \
+  --profile release \
+  --review codex-review.md \
+  --review claude-review.md \
+  --decision decision.md \
+  --check "npm test=passed" \
+  --verify verify.md \
+  --verifier-runner-id claude:verifier
+```
 
 ---
 

@@ -1,6 +1,7 @@
 export {
   DEFAULT_RELEASE_POLICY,
   reduceQualityGate,
+  validateArtifactReferences,
   validateManifestShape
 } from "./core/gate-reducer.mjs";
 

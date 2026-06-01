@@ -38,7 +38,52 @@ export function validateManifestShape(manifest) {
     errors.push("requiredChecks must be an array");
   }
 
+  return [...errors, ...validateArtifactReferences(manifest)];
+}
+
+export function validateArtifactReferences(manifest) {
+  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
+    return [];
+  }
+
+  const errors = [];
+  for (const [index, reviewer] of (manifest.reviewers || []).entries()) {
+    if (reviewer.artifact && !isSafeArtifactPath(reviewer.artifact)) {
+      errors.push(`reviewers[${index}].artifact must stay within artifact root`);
+    }
+  }
+
+  if (manifest.humanDecision?.artifact && !isSafeArtifactPath(manifest.humanDecision.artifact)) {
+    errors.push("humanDecision.artifact must stay within artifact root");
+  }
+
+  if (manifest.verification?.artifact && !isSafeArtifactPath(manifest.verification.artifact)) {
+    errors.push("verification.artifact must stay within artifact root");
+  }
+
+  if (manifest.synthesis?.artifact && !isSafeArtifactPath(manifest.synthesis.artifact)) {
+    errors.push("synthesis.artifact must stay within artifact root");
+  }
+
+  if (manifest.fixer?.artifact && !isSafeArtifactPath(manifest.fixer.artifact)) {
+    errors.push("fixer.artifact must stay within artifact root");
+  }
+
+  for (const [index, check] of (manifest.requiredChecks || []).entries()) {
+    if (check.log && !isSafeArtifactPath(check.log)) {
+      errors.push(`requiredChecks[${index}].log must stay within artifact root`);
+    }
+  }
+
   return errors;
+}
+
+function isSafeArtifactPath(value) {
+  if (typeof value !== "string" || value.length === 0) {
+    return false;
+  }
+
+  return !value.startsWith("/") && !value.split(/[\\/]+/).includes("..");
 }
 
 export function reduceQualityGate(manifest, policy = DEFAULT_RELEASE_POLICY) {
