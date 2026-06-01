@@ -1,0 +1,54 @@
+[
+  {
+    "name": "complete clean release passes",
+    "manifest": {
+      "runId": "eval-clean-release",
+      "status": "verified",
+      "reviewers": [
+        { "runnerId": "codex:gpt-5", "artifact": "reviews/codex.md" },
+        { "runnerId": "claude:sonnet", "artifact": "reviews/claude.md" }
+      ],
+      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "verified",
+        "artifact": "verify.md"
+      },
+      "findings": [],
+      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+    },
+    "expected": { "status": "passed", "exitCode": 0 }
+  },
+  {
+    "name": "single runner baseline does not pass release policy",
+    "manifest": {
+      "runId": "eval-single-runner",
+      "status": "verified",
+      "reviewers": [{ "runnerId": "codex:gpt-5", "artifact": "reviews/codex.md" }],
+      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "verified",
+        "artifact": "verify.md"
+      },
+      "findings": [],
+      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+    },
+    "expected": { "status": "incomplete", "exitCode": 2 }
+  },
+  {
+    "name": "missing verification fails closed",
+    "manifest": {
+      "runId": "eval-missing-verify",
+      "status": "open",
+      "reviewers": [
+        { "runnerId": "codex:gpt-5", "artifact": "reviews/codex.md" },
+        { "runnerId": "claude:sonnet", "artifact": "reviews/claude.md" }
+      ],
+      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "findings": [],
+      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+    },
+    "expected": { "status": "incomplete", "exitCode": 2 }
+  }
+]

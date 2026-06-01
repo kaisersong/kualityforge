@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kualityfore.local/schemas/policy.schema.json",
+  "title": "KualityFore Policy",
+  "type": "object",
+  "properties": {
+    "profile": { "type": "string" },
+    "minReviewers": { "type": "integer", "minimum": 1 },
+    "requireHumanDecision": { "type": "boolean" },
+    "requireRequiredChecks": { "type": "boolean" },
+    "requireIndependentVerifier": { "type": "boolean" },
+    "artifactRoot": { "type": "string" }
+  }
+}
