@@ -22,4 +22,4 @@ jobs:
         run: npm test
 
       - name: Run deterministic eval
-        run: npm run eval:kualityfore
+        run: npm run eval:kualityforge

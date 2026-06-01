@@ -4,7 +4,7 @@ import test from "node:test";
 import { renderSummaryMarkdown } from "../../../src/core/synthesis.mjs";
 
 test("clean summary output matches golden snapshot", async () => {
-  const expected = await readFile("tests/kualityfore/golden/summary-clean.md", "utf8");
+  const expected = await readFile("tests/kualityforge/golden/summary-clean.md", "utf8");
   const actual = renderSummaryMarkdown({ runId: "golden-run", findings: [] });
 
   assert.equal(actual, expected);

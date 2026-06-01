@@ -39,7 +39,7 @@ export function synthesizeFindings(findings) {
 }
 
 export function renderSummaryMarkdown({ runId, findings }) {
-  const lines = [`# KualityFore Summary: ${runId}`, ""];
+  const lines = [`# KualityForge Summary: ${runId}`, ""];
 
   if (findings.length === 0) {
     lines.push("No findings were reported by required reviewers.", "");

@@ -30,7 +30,7 @@ export function createWorkflowTemplate({ runId, artifactRoot, reviewers, target 
   });
 
   return {
-    kind: "kualityfore.workflow-template",
+    kind: "kualityforge.workflow-template",
     runId,
     artifactRoot,
     nodes: [

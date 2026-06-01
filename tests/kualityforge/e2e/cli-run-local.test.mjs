@@ -8,7 +8,7 @@ import test from "node:test";
 const cliPath = resolve("src/cli/index.mjs");
 
 test("run executes a complete local artifact workflow", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kualityfore-run-local-"));
+  const root = await mkdtemp(join(tmpdir(), "kualityforge-run-local-"));
   try {
     const codexReview = await writeReview(root, "codex-input.md", "codex:gpt-5");
     const claudeReview = await writeReview(root, "claude-input.md", "claude:sonnet");
@@ -65,7 +65,7 @@ async function writeReview(root, filename, runnerId) {
     path,
     `# Review
 
-\`\`\`kualityfore-review
+\`\`\`kualityforge-review
 {
   "runnerId": "${runnerId}",
   "status": "completed",

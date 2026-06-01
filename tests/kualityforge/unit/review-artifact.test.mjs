@@ -5,7 +5,7 @@ import { parseReviewArtifact, safeArtifactName } from "../../../src/core/review-
 test("parseReviewArtifact reads a structured review block", () => {
   const review = parseReviewArtifact(`# Review
 
-\`\`\`kualityfore-review
+\`\`\`kualityforge-review
 {
   "runnerId": "codex:gpt-5",
   "status": "completed",
@@ -29,7 +29,7 @@ test("parseReviewArtifact reads a structured review block", () => {
 });
 
 test("parseReviewArtifact rejects missing structured block", () => {
-  assert.throws(() => parseReviewArtifact("# Review without data"), /kualityfore-review block/);
+  assert.throws(() => parseReviewArtifact("# Review without data"), /kualityforge-review block/);
 });
 
 test("safeArtifactName makes runner ids file-safe", () => {

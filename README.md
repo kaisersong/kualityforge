@@ -1,6 +1,6 @@
-# kualityfore
+# kualityforge
 
-> KualityFore is an artifact-first quality gate system for multi-agent software delivery. It turns model reviews, human decisions, fixes, verification, tests, and eval evidence into deterministic release gates that can be called from Codex, Claude Code, xiaok, CI, or KSwarm workflows.
+> KualityForge is an artifact-first quality gate system for multi-agent software delivery. It turns model reviews, human decisions, fixes, verification, tests, and eval evidence into deterministic release gates that can be called from Codex, Claude Code, xiaok, CI, or KSwarm workflows.
 
 A local, auditable quality gate core for projects that need more than a single-agent code review.
 
@@ -10,29 +10,29 @@ A local, auditable quality gate core for projects that need more than a single-a
 
 ## Status
 
-KualityFore is in its bootstrap phase. The repository currently contains the first deterministic gate reducer slice:
+KualityForge is in its bootstrap phase. The repository currently contains the first deterministic gate reducer slice:
 
 - `manifest.json` / policy schema draft.
-- `kualityfore init --artifact-root <path> --run-id <id>` CLI entry.
-- `kualityfore gate --manifest <path>` and `kualityfore gate --artifact-root <path>` CLI entries.
-- Review artifact ingestion through `kualityfore write-review`.
-- Summary generation through `kualityfore synthesize`.
+- `kualityforge init --artifact-root <path> --run-id <id>` CLI entry.
+- `kualityforge gate --manifest <path>` and `kualityforge gate --artifact-root <path>` CLI entries.
+- Review artifact ingestion through `kualityforge write-review`.
+- Summary generation through `kualityforge synthesize`.
 - Human decision, required check, and verification recording commands.
-- Deterministic eval through `kualityfore eval`.
-- Local artifact workflow through `kualityfore run`.
+- Deterministic eval through `kualityforge eval`.
+- Local artifact workflow through `kualityforge run`.
 - Artifact reference validation rejects absolute paths and `..` traversal.
 - Fail-closed reducer behavior for incomplete quality evidence.
 - Unit tests for pass, reviewer shortage, invalid manifest, and non-independent verifier cases.
 - Fixture, golden, CI, and E2E tests for artifact-root initialization, synthesis output, eval, and a clean passing run.
-- Project docs via `docs -> ../mydocs/kualityfore`.
+- Project docs via `docs -> ../mydocs/kualityforge`.
 
 Live multi-agent runner dispatch and KSwarm orchestration are intentionally staged after the deterministic core. The local `run` command consumes already-created artifacts; it does not call models.
 
 ---
 
-## Why KualityFore Exists
+## Why KualityForge Exists
 
-Modern AI coding workflows can generate code quickly, but release confidence is still fragile when quality checks are only chat transcripts or one model's opinion. KualityFore is built around a stricter premise:
+Modern AI coding workflows can generate code quickly, but release confidence is still fragile when quality checks are only chat transcripts or one model's opinion. KualityForge is built around a stricter premise:
 
 **a quality gate should pass only when the evidence is complete, structured, independently verifiable, and reproducible.**
 
@@ -46,7 +46,7 @@ It is inspired by Viking's `review-forge` review / synthesize / fix / verify loo
 - Required project checks and eval baselines become part of the release evidence.
 - CI / ship workflows can consume a deterministic gate result instead of reading prose.
 
-KualityFore is not a xiaok-only feature. The core is designed to be used by any project through a CLI, artifact folder, and policy file.
+KualityForge is not a xiaok-only feature. The core is designed to be used by any project through a CLI, artifact folder, and policy file.
 
 ---
 
@@ -54,7 +54,7 @@ KualityFore is not a xiaok-only feature. The core is designed to be used by any 
 
 ### 1. Artifact-First Quality
 
-KualityFore treats files as the quality record. Reviews, synthesis, human decisions, fix plans, required checks, verification reports, and final gate status are written as artifacts under a run directory.
+KualityForge treats files as the quality record. Reviews, synthesis, human decisions, fix plans, required checks, verification reports, and final gate status are written as artifacts under a run directory.
 
 This gives the workflow three useful properties:
 
@@ -82,7 +82,7 @@ docs/quality/<run-id>/
 
 Model reviewers are allowed to be probabilistic. The gate reducer is not.
 
-Given the same manifest, policy, and artifacts, `kualityfore gate` must always return the same status, reasons, and exit code. This keeps release automation stable even when the review phase uses different models or sessions.
+Given the same manifest, policy, and artifacts, `kualityforge gate` must always return the same status, reasons, and exit code. This keeps release automation stable even when the review phase uses different models or sessions.
 
 Current gate statuses are intentionally conservative:
 
@@ -93,7 +93,7 @@ Current gate statuses are intentionally conservative:
 
 ### 3. Fail Closed
 
-KualityFore should never turn missing evidence into success. Release-style profiles fail closed when any of these are missing or invalid:
+KualityForge should never turn missing evidence into success. Release-style profiles fail closed when any of these are missing or invalid:
 
 - Required reviewer count.
 - Human decision artifact.
@@ -107,7 +107,7 @@ This is a deliberate bias. A quality gate that occasionally blocks too much can 
 
 ### 4. Human Decision Is the Fix Boundary
 
-AI reviewers can find issues, but they should not decide unilaterally what gets changed. KualityFore keeps a hard boundary:
+AI reviewers can find issues, but they should not decide unilaterally what gets changed. KualityForge keeps a hard boundary:
 
 - Unchecked findings do not enter the fix queue.
 - `wont_fix` and `risk_accepted` require an explicit decision record.
@@ -122,14 +122,14 @@ For release profiles, the fixer and verifier must be different runner identities
 
 The first implementation enforces this at manifest level. Later KSwarm integration will enforce it at workflow scheduling level.
 
-### 6. KSwarm as Orchestrator, KualityFore as Gate Core
+### 6. KSwarm as Orchestrator, KualityForge as Gate Core
 
-KualityFore does not own durable workflow execution. That belongs in KSwarm.
+KualityForge does not own durable workflow execution. That belongs in KSwarm.
 
 The boundary is:
 
-- KualityFore owns schemas, artifact parsing, reducers, CLI gates, tests, fixtures, and evals.
-- KSwarm owns `kualityfore-flow`: fan-out, retries, resume, cancellation, decision gates, and node scheduling.
+- KualityForge owns schemas, artifact parsing, reducers, CLI gates, tests, fixtures, and evals.
+- KSwarm owns `kualityforge-flow`: fan-out, retries, resume, cancellation, decision gates, and node scheduling.
 - Intent Broker owns runner dispatch and event correlation.
 - xiaok owns desktop / CLI entry points and user-facing status.
 
@@ -137,7 +137,7 @@ This keeps the gate core usable outside xiaok and outside KSwarm.
 
 ### 7. Eval Is Part of the Product
 
-KualityFore itself must be tested and evaluated. A quality gate system cannot rely on a few successful real-world runs as proof.
+KualityForge itself must be tested and evaluated. A quality gate system cannot rely on a few successful real-world runs as proof.
 
 The planned verification layers are:
 
@@ -155,7 +155,7 @@ The planned verification layers are:
 ## Repository Layout
 
 ```text
-kualityfore/
+kualityforge/
   src/
     cli/
       index.mjs
@@ -166,7 +166,7 @@ kualityfore/
     manifest.schema.json
     policy.schema.json
   tests/
-    kualityfore/
+    kualityforge/
       unit/
       fixtures/
       golden/
@@ -175,10 +175,10 @@ kualityfore/
       ci/
       e2e/
   evals/
-    kualityfore/
+    kualityforge/
       corpus/
       reports/
-  docs -> ../mydocs/kualityfore
+  docs -> ../mydocs/kualityforge
 ```
 
 ---
@@ -188,7 +188,7 @@ kualityfore/
 Run tests:
 
 ```bash
-cd /Users/song/projects/kualityfore
+cd /Users/song/projects/kualityforge
 npm test
 ```
 
@@ -201,14 +201,14 @@ node src/cli/index.mjs gate --manifest path/to/manifest.json
 After linking the package locally:
 
 ```bash
-cd /Users/song/projects/kualityfore
+cd /Users/song/projects/kualityforge
 npm link
 ```
 
 the command shape becomes:
 
 ```bash
-kualityfore gate --manifest path/to/manifest.json
+kualityforge gate --manifest path/to/manifest.json
 ```
 
 Expected successful output:
@@ -241,69 +241,69 @@ An incomplete run returns a non-zero exit code:
 Currently implemented:
 
 ```bash
-kualityfore init --artifact-root <path> --run-id <id> [--profile <name>]
-kualityfore run --artifact-root <path> --run-id <id> --review <review.md>... --decision <decision.md> --check <name=status> --verify <verify.md> --verifier-runner-id <id>
-kualityfore write-review --artifact-root <path> --input <review.md>
-kualityfore synthesize --artifact-root <path>
-kualityfore decide --artifact-root <path> --input <decision.md>
-kualityfore record-check --artifact-root <path> --name <name> --status <status>
-kualityfore verify --artifact-root <path> --runner-id <id> --status <status> --input <verify.md>
-kualityfore gate --manifest <path>
-kualityfore gate --artifact-root <path>
-kualityfore eval [--corpus <dir>] [--report <path>]
+kualityforge init --artifact-root <path> --run-id <id> [--profile <name>]
+kualityforge run --artifact-root <path> --run-id <id> --review <review.md>... --decision <decision.md> --check <name=status> --verify <verify.md> --verifier-runner-id <id>
+kualityforge write-review --artifact-root <path> --input <review.md>
+kualityforge synthesize --artifact-root <path>
+kualityforge decide --artifact-root <path> --input <decision.md>
+kualityforge record-check --artifact-root <path> --name <name> --status <status>
+kualityforge verify --artifact-root <path> --runner-id <id> --status <status> --input <verify.md>
+kualityforge gate --manifest <path>
+kualityforge gate --artifact-root <path>
+kualityforge eval [--corpus <dir>] [--report <path>]
 ```
 
 Planned public commands:
 
 ```bash
-kualityfore run --workflow kswarm
-kualityfore adapter codex
-kualityfore adapter claude
-kualityfore adapter xiaok
+kualityforge run --workflow kswarm
+kualityforge adapter codex
+kualityforge adapter claude
+kualityforge adapter xiaok
 ```
 
 Planned test commands:
 
 ```bash
-npm run test:kualityfore:unit
-npm run test:kualityfore:fixtures
-npm run test:kualityfore:golden
-npm run test:kualityfore:workflow
-npm run test:kualityfore:adapters
-npm run test:kualityfore:ci
-npm run test:kualityfore:e2e
-npm run eval:kualityfore
+npm run test:kualityforge:unit
+npm run test:kualityforge:fixtures
+npm run test:kualityforge:golden
+npm run test:kualityforge:workflow
+npm run test:kualityforge:adapters
+npm run test:kualityforge:ci
+npm run test:kualityforge:e2e
+npm run eval:kualityforge
 ```
 
 ---
 
-## Using KualityFore from Codex
+## Using KualityForge from Codex
 
 Today, Codex can call the deterministic gate directly:
 
 ```bash
-node /Users/song/projects/kualityfore/src/cli/index.mjs gate \
+node /Users/song/projects/kualityforge/src/cli/index.mjs gate \
   --manifest docs/quality/<run-id>/manifest.json
 ```
 
 The long-term shape is:
 
 ```bash
-kualityfore run \
+kualityforge run \
   --target . \
   --artifact-root docs/quality/<run-id> \
   --profile release \
   --workflow kswarm
 ```
 
-Codex should not claim a full KualityFore gate pass unless the multi-agent artifact chain is complete: independent reviews, synthesis, human decision, approved-only fix, required checks, and independent verification.
+Codex should not claim a full KualityForge gate pass unless the multi-agent artifact chain is complete: independent reviews, synthesis, human decision, approved-only fix, required checks, and independent verification.
 
 A single Codex run can be recorded as a baseline, but it is not a completed multi-agent gate.
 
 For local artifacts that already exist, Codex can run a deterministic local workflow today:
 
 ```bash
-kualityfore run \
+kualityforge run \
   --artifact-root docs/quality/<run-id> \
   --run-id <run-id> \
   --profile release \
@@ -322,14 +322,14 @@ kualityfore run \
 Project documentation lives in `mydocs` through a symlink:
 
 ```text
-/Users/song/projects/kualityfore/docs -> ../mydocs/kualityfore
+/Users/song/projects/kualityforge/docs -> ../mydocs/kualityforge
 ```
 
 Main docs:
 
 - [Docs index](docs/README.md)
 - [Artifact protocol](docs/protocol.md)
-- [Bootstrap design](docs/design/2026-06-01-kualityfore-project-bootstrap-design.md)
+- [Bootstrap design](docs/design/2026-06-01-kualityforge-project-bootstrap-design.md)
 - [Quality records](docs/quality/README.md)
 - [Eval records](docs/evals/README.md)
 
@@ -347,5 +347,5 @@ Important rules:
 - New behavior starts with design docs.
 - High-risk core behavior needs adversarial review.
 - Tests come before production changes.
-- KualityFore core must stay project-agnostic.
+- KualityForge core must stay project-agnostic.
 - Project-specific release policy belongs in policy/profile files, not hardcoded reducer logic.

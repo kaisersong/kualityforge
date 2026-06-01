@@ -19,10 +19,10 @@ test("normalizePolicy merges project settings with release defaults", () => {
   assert.equal(policy.requireIndependentVerifier, false);
 });
 
-test("loadPolicyFile reads .kualityfore.json style policy", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kualityfore-policy-"));
+test("loadPolicyFile reads .kualityforge.json style policy", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kualityforge-policy-"));
   try {
-    const policyPath = join(root, ".kualityfore.json");
+    const policyPath = join(root, ".kualityforge.json");
     await writeFile(
       policyPath,
       JSON.stringify({ profile: "smoke", minReviewers: 1 }, null, 2),

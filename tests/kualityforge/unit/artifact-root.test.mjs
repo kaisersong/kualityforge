@@ -17,7 +17,7 @@ test("createInitialManifest creates a deterministic empty run manifest", () => {
   });
 
   assert.deepEqual(manifest, {
-    schemaVersion: "kualityfore.manifest.v1",
+    schemaVersion: "kualityforge.manifest.v1",
     runId: "release-1",
     status: "open",
     profile: "release",
@@ -29,7 +29,7 @@ test("createInitialManifest creates a deterministic empty run manifest", () => {
 });
 
 test("initializeArtifactRoot writes manifest and expected directories", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kualityfore-artifacts-"));
+  const root = await mkdtemp(join(tmpdir(), "kualityforge-artifacts-"));
   try {
     const result = await initializeArtifactRoot(root, {
       runId: "release-2",
@@ -51,7 +51,7 @@ test("initializeArtifactRoot writes manifest and expected directories", async ()
 });
 
 test("loadManifestFromArtifactRoot reads manifest.json from a run directory", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kualityfore-load-"));
+  const root = await mkdtemp(join(tmpdir(), "kualityforge-load-"));
   try {
     await initializeArtifactRoot(root, {
       runId: "release-3",

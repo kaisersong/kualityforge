@@ -12,7 +12,7 @@ export function createReviewTask({ runId, artifactRoot, runnerId, target }) {
   }
 
   return {
-    kind: "kualityfore.review",
+    kind: "kualityforge.review",
     runId,
     artifactRoot,
     runnerId,

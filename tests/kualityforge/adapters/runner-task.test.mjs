@@ -10,7 +10,7 @@ test("createReviewTask defines a runner-agnostic review handoff", () => {
     target: "/repo"
   });
 
-  assert.equal(task.kind, "kualityfore.review");
+  assert.equal(task.kind, "kualityforge.review");
   assert.equal(task.runId, "run-1");
   assert.equal(task.runnerId, "codex:gpt-5");
   assert.equal(task.role, "reviewer");

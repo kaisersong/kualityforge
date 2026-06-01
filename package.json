@@ -1,23 +1,23 @@
 {
-  "name": "kualityfore",
+  "name": "kualityforge",
   "version": "0.1.0",
   "private": true,
-  "description": "KualityFore quality gate protocol, reducer, CLI, tests, and eval baseline.",
+  "description": "KualityForge quality gate protocol, reducer, CLI, tests, and eval baseline.",
   "type": "module",
   "bin": {
-    "kualityfore": "./src/cli/index.mjs"
+    "kualityforge": "./src/cli/index.mjs"
   },
   "scripts": {
-    "test": "node --test tests/kualityfore/*/*.test.mjs",
-    "test:kualityfore:unit": "node --test tests/kualityfore/unit/*.test.mjs",
-    "test:kualityfore:fixtures": "node --test tests/kualityfore/fixtures/*.test.mjs",
-    "test:kualityfore:golden": "node --test tests/kualityfore/golden/*.test.mjs",
-    "test:kualityfore:workflow": "node --test tests/kualityfore/workflow/*.test.mjs",
-    "test:kualityfore:adapters": "node --test tests/kualityfore/adapters/*.test.mjs",
-    "test:kualityfore:ci": "node --test tests/kualityfore/ci/*.test.mjs",
-    "test:kualityfore:e2e": "node --test tests/kualityfore/e2e/*.test.mjs",
-    "eval:kualityfore": "node src/cli/index.mjs eval",
-    "eval:kualityfore:model-assisted": "node src/cli/index.mjs eval --model-assisted"
+    "test": "node --test tests/kualityforge/*/*.test.mjs",
+    "test:kualityforge:unit": "node --test tests/kualityforge/unit/*.test.mjs",
+    "test:kualityforge:fixtures": "node --test tests/kualityforge/fixtures/*.test.mjs",
+    "test:kualityforge:golden": "node --test tests/kualityforge/golden/*.test.mjs",
+    "test:kualityforge:workflow": "node --test tests/kualityforge/workflow/*.test.mjs",
+    "test:kualityforge:adapters": "node --test tests/kualityforge/adapters/*.test.mjs",
+    "test:kualityforge:ci": "node --test tests/kualityforge/ci/*.test.mjs",
+    "test:kualityforge:e2e": "node --test tests/kualityforge/e2e/*.test.mjs",
+    "eval:kualityforge": "node src/cli/index.mjs eval",
+    "eval:kualityforge:model-assisted": "node src/cli/index.mjs eval --model-assisted"
   },
   "engines": {
     "node": ">=20"

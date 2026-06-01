@@ -6,22 +6,22 @@
 
 ## 相关项目
 
-- `kualityfore` 关联项目都在 `/Users/song/projects/` 下：
-  - `kswarm`：负责 `kualityfore-flow` dynamic workflow 编排，包括 reviewer fan-out、task retry、resume、cancel、human decision gate、fix / verify 节点调度和 run state 持久化。
+- `kualityforge` 关联项目都在 `/Users/song/projects/` 下：
+  - `kswarm`：负责 `kualityforge-flow` dynamic workflow 编排，包括 reviewer fan-out、task retry、resume、cancel、human decision gate、fix / verify 节点调度和 run state 持久化。
   - `intent-broker`：负责本地 agent / runner 注册、participant identity、任务投递、artifact completion event、decision / approval 事件和跨 agent 协作通信。
-  - `xiaok-cli`：负责 desktop / CLI 入口、release / ship 集成、KualityFore run 状态展示和用户交互。
-  - `mydocs`：负责 `kualityfore` 文档、设计记录、质量记录和 eval 报告。`kualityfore/docs` 必须软链接到 `/Users/song/projects/mydocs/kualityfore`。
-- 修改 KualityFore workflow、runner contract、artifact handoff、review/fix/verify 状态机时，优先检查 `kswarm` 是否也需要改。
+  - `xiaok-cli`：负责 desktop / CLI 入口、release / ship 集成、KualityForge run 状态展示和用户交互。
+  - `mydocs`：负责 `kualityforge` 文档、设计记录、质量记录和 eval 报告。`kualityforge/docs` 必须软链接到 `/Users/song/projects/mydocs/kualityforge`。
+- 修改 KualityForge workflow、runner contract、artifact handoff、review/fix/verify 状态机时，优先检查 `kswarm` 是否也需要改。
 - 修改 agent 协作、runner dispatch、event correlation、participant identity、approval / decision 流程时，优先检查 `intent-broker` 是否也需要改。
 - 修改 xiaok desktop / CLI 入口、release gate、UI 展示、ship 集成时，优先检查 `xiaok-cli` 是否也需要改。
 - 提交代码时，相关项目如果有配套改动也要一起提交；如果只提交其中一部分，必须在最终说明里写清楚原因。
 
 ## 项目定位
 
-- `kualityfore` 是通用质量门禁核心项目。
+- `kualityforge` 是通用质量门禁核心项目。
 - 不把 KSwarm dynamic workflow、xiaok desktop UI、intent-broker runner dispatch 的实现混入 core。
 - core 只负责 artifact protocol、schema、parser、gate reducer、CLI、fixtures、eval corpus 和 CI 可调用的确定性判断。
-- KualityFore 参考 Viking `review-forge` 的多模型 review / synthesize / fix / verify 思路，但不是项目私有 skill；它要成为跨项目可复用、CI / ship 可调用的质量门禁基础设施。
+- KualityForge 参考 Viking `review-forge` 的多模型 review / synthesize / fix / verify 思路，但不是项目私有 skill；它要成为跨项目可复用、CI / ship 可调用的质量门禁基础设施。
 
 ## 当前重心
 
@@ -30,7 +30,7 @@
   - artifact parser。
   - finding reducer。
   - gate reducer。
-  - CLI `kualityfore gate`。
+  - CLI `kualityforge gate`。
   - fixture / golden tests。
   - deterministic eval baseline。
 - 第一阶段不要实现 desktop UI、真实模型 runner、GitHub Actions 发布集成或完整 KSwarm workflow executor。
@@ -38,12 +38,12 @@
 
 ## 文档
 
-- 本项目的 `docs` 是软链接，指向 `/Users/song/projects/mydocs/kualityfore`。
-- 设计文档、质量记录、eval 报告说明默认写到 `docs/**`，也就是实际写入 `mydocs/kualityfore/**`。
+- 本项目的 `docs` 是软链接，指向 `/Users/song/projects/mydocs/kualityforge`。
+- 设计文档、质量记录、eval 报告说明默认写到 `docs/**`，也就是实际写入 `mydocs/kualityforge/**`。
 - 不要把项目文档只写在 README 里；README 只放入口和运行说明。
 - 设计文档入口：
   - `docs/README.md`
-  - `docs/design/2026-06-01-kualityfore-project-bootstrap-design.md`
+  - `docs/design/2026-06-01-kualityforge-project-bootstrap-design.md`
 - 如果从 `xiaok-cli` 的早期 ReviewForge 设计迁移内容，优先保持语义一致，不要复制 xiaok-cli release profile 作为 core 默认规则。
 
 ## 实现门禁
@@ -51,7 +51,7 @@
 - 新需求或行为变更先写设计文档。
 - 实现前先做对抗性评审。
 - 评审后先写测试，再写 production code。
-- KualityFore 自身必须有 unit、fixture、workflow、adapter、CI、E2E、eval 分层验证。
+- KualityForge 自身必须有 unit、fixture、workflow、adapter、CI、E2E、eval 分层验证。
 - 只有 docs、adversarial review、tests 都到位后，才开始修改 production code。
 - 核心/高风险改动强制执行方案 + 对抗性评审，不可跳过：
   - manifest / policy schema。
@@ -67,10 +67,10 @@
 
 ## 边界
 
-- `kswarm`：只放 `kualityfore-flow` workflow template、fan-out、retry、resume、cancel 等编排。
+- `kswarm`：只放 `kualityforge-flow` workflow template、fan-out、retry、resume、cancel 等编排。
 - `intent-broker`：只放 runner dispatch、event correlation、participant identity 等协作协议。
 - `xiaok-cli`：只放入口、展示、ship/release 集成。
-- `kualityfore`：保持可被任意项目独立调用，不硬编码 xiaok-cli release 规则。
+- `kualityforge`：保持可被任意项目独立调用，不硬编码 xiaok-cli release 规则。
 
 ## Core 架构规则
 
@@ -88,19 +88,19 @@
 - 基础验证：
   ```bash
   npm test
-  npm run test:kualityfore:unit
+  npm run test:kualityforge:unit
   ```
-- 后续完整 KualityFore 自身 gate 应包含：
+- 后续完整 KualityForge 自身 gate 应包含：
   ```bash
-  npm run test:kualityfore:unit
-  npm run test:kualityfore:fixtures
-  npm run test:kualityfore:workflow
-  npm run test:kualityfore:adapters
-  npm run test:kualityfore:ci
-  npm run test:kualityfore:e2e
-  npm run eval:kualityfore
+  npm run test:kualityforge:unit
+  npm run test:kualityforge:fixtures
+  npm run test:kualityforge:workflow
+  npm run test:kualityforge:adapters
+  npm run test:kualityforge:ci
+  npm run test:kualityforge:e2e
+  npm run eval:kualityforge
   ```
-- `npm run eval:kualityfore:model-assisted` 只能作为 release 前或 nightly 信号；不要让它成为 PR 必跑的唯一质量证据。
+- `npm run eval:kualityforge:model-assisted` 只能作为 release 前或 nightly 信号；不要让它成为 PR 必跑的唯一质量证据。
 - 新增 reducer / parser / schema 行为必须先补 fixture 或 unit test。
 - 修复 bug 优先补复现 fixture；不要只改 reducer 让当前 case 通过。
 
@@ -114,7 +114,7 @@
 
 ## Docs Symlink Scope
 
-- `docs` 是软链接，指向 `/Users/song/projects/mydocs/kualityfore`。
+- `docs` 是软链接，指向 `/Users/song/projects/mydocs/kualityforge`。
 - `docs/design/**`、`docs/quality/**`、`docs/evals/**` 都视为本 repo 工作范围内的项目文档。
-- 在 `/Users/song/projects/kualityfore` 下执行 `git status` 不会显示 `docs` 真实目标所属 repo 的全部上下文；文档改动实际属于 `mydocs` repo。
+- 在 `/Users/song/projects/kualityforge` 下执行 `git status` 不会显示 `docs` 真实目标所属 repo 的全部上下文；文档改动实际属于 `mydocs` repo。
 - 任务需要时直接更新最小相关文档集；不要因为 design-doc edit 跨 symlink 就额外请求确认。

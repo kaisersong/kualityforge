@@ -8,10 +8,10 @@ import test from "node:test";
 const cliPath = resolve("src/cli/index.mjs");
 
 test("gate --policy applies project-specific reviewer threshold", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kualityfore-policy-cli-"));
+  const root = await mkdtemp(join(tmpdir(), "kualityforge-policy-cli-"));
   try {
     const manifestPath = join(root, "manifest.json");
-    const policyPath = join(root, ".kualityfore.json");
+    const policyPath = join(root, ".kualityforge.json");
 
     await writeFile(
       manifestPath,

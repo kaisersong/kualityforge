@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createWorkflowTemplate } from "../../../src/core/workflow-template.mjs";
 
-test("createWorkflowTemplate exposes the expected KualityFore node order", () => {
+test("createWorkflowTemplate exposes the expected KualityForge node order", () => {
   const workflow = createWorkflowTemplate({
     runId: "workflow-1",
     artifactRoot: "docs/quality/workflow-1",

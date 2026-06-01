@@ -8,7 +8,7 @@ import test from "node:test";
 const cliPath = resolve("src/cli/index.mjs");
 
 test("init creates an artifact root with a manifest", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kualityfore-cli-init-"));
+  const root = await mkdtemp(join(tmpdir(), "kualityforge-cli-init-"));
   try {
     const result = runCli([
       "init",
@@ -34,7 +34,7 @@ test("init creates an artifact root with a manifest", async () => {
 });
 
 test("gate can read manifest from artifact root", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kualityfore-cli-gate-"));
+  const root = await mkdtemp(join(tmpdir(), "kualityforge-cli-gate-"));
   try {
     const init = runCli([
       "init",

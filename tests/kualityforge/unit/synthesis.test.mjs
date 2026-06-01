@@ -42,7 +42,7 @@ test("renderSummaryMarkdown writes a human decision checklist", () => {
     ]
   });
 
-  assert.match(markdown, /# KualityFore Summary: run-1/);
+  assert.match(markdown, /# KualityForge Summary: run-1/);
   assert.match(markdown, /- \[ \] QF-001/);
   assert.match(markdown, /Reviewers: codex, claude/);
 });

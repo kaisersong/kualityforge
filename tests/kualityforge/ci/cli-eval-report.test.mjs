@@ -8,7 +8,7 @@ import test from "node:test";
 const cliPath = resolve("src/cli/index.mjs");
 
 test("eval --report writes deterministic eval output", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kualityfore-eval-report-"));
+  const root = await mkdtemp(join(tmpdir(), "kualityforge-eval-report-"));
   try {
     const reportPath = join(root, "report.json");
     const result = spawnSync(process.execPath, [cliPath, "eval", "--report", reportPath], {

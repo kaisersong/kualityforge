@@ -2,4 +2,4 @@ node_modules/
 coverage/
 .DS_Store
 *.log
-evals/kualityfore/reports/*.tmp.json
+evals/kualityforge/reports/*.tmp.json

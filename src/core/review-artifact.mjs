@@ -1,9 +1,9 @@
-const REVIEW_BLOCK_PATTERN = /```kualityfore-review\s*([\s\S]*?)```/m;
+const REVIEW_BLOCK_PATTERN = /```kualityforge-review\s*([\s\S]*?)```/m;
 
 export function parseReviewArtifact(markdown) {
   const match = REVIEW_BLOCK_PATTERN.exec(markdown);
   if (!match) {
-    throw new Error("review artifact must include a kualityfore-review block");
+    throw new Error("review artifact must include a kualityforge-review block");
   }
 
   const review = JSON.parse(match[1]);

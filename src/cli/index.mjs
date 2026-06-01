@@ -174,7 +174,7 @@ try {
   }
 
   if (command === "eval") {
-    const corpusDir = readOption(args, "--corpus") || resolve("evals/kualityfore/corpus");
+    const corpusDir = readOption(args, "--corpus") || resolve("evals/kualityforge/corpus");
     const report = readOption(args, "--report");
     const result = await runDeterministicEval(corpusDir);
     if (report) {
@@ -317,18 +317,18 @@ function parseCheckOption(value) {
 }
 
 function printHelp() {
-  console.log(`KualityFore
+  console.log(`KualityForge
 
 Usage:
-  kualityfore init --artifact-root <path> --run-id <id> [--profile <name>]
-  kualityfore run --artifact-root <path> --run-id <id> --review <review.md>... --decision <decision.md> --check <name=status> --verify <verify.md> --verifier-runner-id <id>
-  kualityfore write-review --artifact-root <path> --input <review.md>
-  kualityfore synthesize --artifact-root <path>
-  kualityfore decide --artifact-root <path> --input <decision.md>
-  kualityfore record-check --artifact-root <path> --name <name> --status <status>
-  kualityfore verify --artifact-root <path> --runner-id <id> --status <status> --input <verify.md>
-  kualityfore gate --manifest <path>
-  kualityfore gate --artifact-root <path> [--policy <path>]
-  kualityfore eval [--corpus <dir>] [--report <path>]
+  kualityforge init --artifact-root <path> --run-id <id> [--profile <name>]
+  kualityforge run --artifact-root <path> --run-id <id> --review <review.md>... --decision <decision.md> --check <name=status> --verify <verify.md> --verifier-runner-id <id>
+  kualityforge write-review --artifact-root <path> --input <review.md>
+  kualityforge synthesize --artifact-root <path>
+  kualityforge decide --artifact-root <path> --input <decision.md>
+  kualityforge record-check --artifact-root <path> --name <name> --status <status>
+  kualityforge verify --artifact-root <path> --runner-id <id> --status <status> --input <verify.md>
+  kualityforge gate --manifest <path>
+  kualityforge gate --artifact-root <path> [--policy <path>]
+  kualityforge eval [--corpus <dir>] [--report <path>]
 `);
 }

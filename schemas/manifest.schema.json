@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://kualityfore.local/schemas/manifest.schema.json",
-  "title": "KualityFore Manifest",
+  "$id": "https://kualityforge.local/schemas/manifest.schema.json",
+  "title": "KualityForge Manifest",
   "type": "object",
   "required": ["runId", "status", "reviewers", "findings", "requiredChecks"],
   "properties": {

@@ -8,7 +8,7 @@ import test from "node:test";
 const cliPath = resolve("src/cli/index.mjs");
 
 test("CLI can initialize, collect clean reviews, decide, verify, and pass gate", async () => {
-  const root = await mkdtemp(join(tmpdir(), "kualityfore-clean-run-"));
+  const root = await mkdtemp(join(tmpdir(), "kualityforge-clean-run-"));
   try {
     assert.equal(
       runCli(["init", "--artifact-root", root, "--run-id", "clean-run", "--profile", "release"])
@@ -79,7 +79,7 @@ async function writeReview(root, filename, runnerId) {
     path,
     `# Review
 
-\`\`\`kualityfore-review
+\`\`\`kualityforge-review
 {
   "runnerId": "${runnerId}",
   "status": "completed",

@@ -9,7 +9,7 @@ export function createInitialManifest({ runId, profile = "default", createdAt = 
   }
 
   return {
-    schemaVersion: "kualityfore.manifest.v1",
+    schemaVersion: "kualityforge.manifest.v1",
     runId,
     status: "open",
     profile,

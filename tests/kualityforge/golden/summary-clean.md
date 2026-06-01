@@ -1,4 +1,4 @@
-# KualityFore Summary: golden-run
+# KualityForge Summary: golden-run
 
 No findings were reported by required reviewers.
 
