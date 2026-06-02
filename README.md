@@ -22,6 +22,7 @@ KualityForge is in its bootstrap phase. The repository currently contains the fi
 - Local artifact workflow through `kualityforge run`.
 - Context pack freezing through `kualityforge init --project-root ... --docs-root ... --quality-principles ...`.
 - KSwarm dynamic workflow preview and runtime plan generation through `kualityforge kswarm-preview`.
+- KSwarm runtime executor core and offline smoke command through `kualityforge kswarm-run --offline`.
 - Review artifact context acknowledgement, context provenance, context gaps, and quality principle violation parsing.
 - Artifact reference validation rejects absolute paths and `..` traversal.
 - Fail-closed reducer behavior for incomplete quality evidence.
@@ -29,7 +30,7 @@ KualityForge is in its bootstrap phase. The repository currently contains the fi
 - Fixture, golden, CI, and E2E tests for artifact-root initialization, synthesis output, eval, and a clean passing run.
 - Project docs via `docs -> ../mydocs/kualityforge`.
 
-Live multi-agent runner dispatch is intentionally outside the deterministic core. The local `run` command consumes already-created artifacts; it does not call models. `kswarm-preview` now emits the KSwarm `script_generated` preview and KualityForge runtime plan that an external workflow runtime can submit to KSwarm.
+Live multi-agent runner dispatch is intentionally outside the deterministic core. The local `run` command consumes already-created artifacts; it does not call models. `kswarm-preview` emits the KSwarm `script_generated` preview and KualityForge runtime plan. `kswarm-run --offline` executes that plan against an in-memory KSwarm client for contract and artifact smoke testing; live KSwarm / Intent Broker adapters are separate integration work.
 
 ---
 
@@ -158,6 +159,7 @@ The boundary is:
 
 - KualityForge owns schemas, artifact parsing, reducers, CLI gates, tests, fixtures, and evals.
 - KualityForge can generate a KSwarm `script_generated` workflow preview and a runtime plan.
+- KualityForge provides an injectable runtime executor that can run the plan without hardcoding any model runner.
 - KSwarm owns `kualityforge-flow`: fan-out state, retries, resume, cancellation, decision gates, and node scheduling.
 - Intent Broker owns runner dispatch and event correlation.
 - xiaok owns desktop / CLI entry points and user-facing status.
@@ -297,6 +299,7 @@ kualityforge verify --artifact-root <path> --runner-id <id> --status <status> --
 kualityforge gate --manifest <path>
 kualityforge gate --artifact-root <path>
 kualityforge kswarm-preview --project-id <id> --run-id <id> --artifact-root <path> --reviewer <runner-id>...
+kualityforge kswarm-run --offline --preview <preview.json> --plan <runtime-plan.json> --review <runner-id=review.md>... --decision <decision.md> --check <name=status> [--verify <verify.md> --verifier-runner-id <id>]
 kualityforge eval [--corpus <dir>] [--report <path>]
 ```
 
@@ -384,6 +387,22 @@ The output contains:
 
 The runtime plan is not gate evidence by itself. Reviewer node output must still be written as KualityForge review artifacts and registered in `manifest.json`.
 
+For a local smoke run against the runtime executor without connecting to a live KSwarm service:
+
+```bash
+kualityforge kswarm-run --offline \
+  --preview preview.json \
+  --plan runtime-plan.json \
+  --review codex:gpt-5=codex-review.md \
+  --review claude:sonnet=claude-review.md \
+  --decision decision.md \
+  --check "npm test=passed" \
+  --verify verify.md \
+  --verifier-runner-id claude:verifier
+```
+
+`--offline` uses an in-memory KSwarm client and is intended for contract smoke testing. It does not dispatch real agents.
+
 ---
 
 ## Documentation
@@ -401,6 +420,8 @@ Main docs:
 - [Bootstrap design](docs/design/2026-06-01-kualityforge-project-bootstrap-design.md)
 - [KSwarm dynamic workflow integration](docs/design/2026-06-02-kswarm-dynamic-workflow-integration.md)
 - [KSwarm dynamic workflow adversarial review](docs/design/2026-06-02-kswarm-dynamic-workflow-integration-adversarial-review.md)
+- [KSwarm runtime executor design](docs/design/2026-06-02-kswarm-runtime-executor-design.md)
+- [KSwarm runtime executor adversarial review](docs/design/2026-06-02-kswarm-runtime-executor-adversarial-review.md)
 - [Quality records](docs/quality/README.md)
 - [Eval records](docs/evals/README.md)
 

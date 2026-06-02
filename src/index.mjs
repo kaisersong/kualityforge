@@ -18,6 +18,16 @@ export { loadPolicyFile, normalizePolicy } from "./core/policy.mjs";
 export { buildContextPack } from "./core/context-pack.mjs";
 export { parseReviewArtifact, safeArtifactName } from "./core/review-artifact.mjs";
 export { renderSummaryMarkdown, synthesizeFindings } from "./core/synthesis.mjs";
+export {
+  recordCheckResult,
+  recordDecisionFile,
+  recordDecisionMarkdown,
+  recordVerificationFile,
+  recordVerificationMarkdown,
+  synthesizeArtifactRoot,
+  writeReviewFileToArtifactRoot,
+  writeReviewMarkdownToArtifactRoot
+} from "./core/artifact-operations.mjs";
 export { loadEvalCases, runDeterministicEval, runDeterministicEvalCases } from "./core/eval-runner.mjs";
 export { createReviewTask } from "./core/runner-task.mjs";
 export { createWorkflowTemplate } from "./core/workflow-template.mjs";
@@ -29,3 +39,7 @@ export {
   createKswarmScriptPreview,
   mapGateResultToKswarmTerminal
 } from "./core/kswarm-workflow.mjs";
+export {
+  createOfflineKswarmClient,
+  runKswarmRuntimePlan
+} from "./core/kswarm-runtime-executor.mjs";

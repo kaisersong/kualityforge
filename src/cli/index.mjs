@@ -1,20 +1,22 @@
 #!/usr/bin/env node
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { readFile, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import {
+  createOfflineKswarmClient,
   initializeArtifactRoot,
   loadPolicyFile,
   loadManifestFromArtifactRoot,
   createKswarmRuntimePlan,
   createKswarmScriptPreview,
-  parseReviewArtifact,
-  renderSummaryMarkdown,
+  recordCheckResult,
+  recordDecisionFile,
+  recordVerificationFile,
   reduceQualityGate,
+  runKswarmRuntimePlan,
   runDeterministicEval,
-  safeArtifactName,
-  saveManifestToArtifactRoot,
-  synthesizeFindings
+  synthesizeArtifactRoot,
+  writeReviewFileToArtifactRoot
 } from "../index.mjs";
 
 const [, , command, ...args] = process.argv;
@@ -73,15 +75,15 @@ try {
 
     await initializeArtifactRoot(artifactRoot, { runId, profile, context });
     for (const review of reviews) {
-      await writeReviewArtifact(artifactRoot, review);
+      await writeReviewFileToArtifactRoot(artifactRoot, review);
     }
     await synthesizeArtifactRoot(artifactRoot);
-    await recordDecision(artifactRoot, decision);
+    await recordDecisionFile(artifactRoot, decision);
     for (const check of checks) {
       const { name, status } = parseCheckOption(check);
-      await recordCheck(artifactRoot, name, status);
+      await recordCheckResult(artifactRoot, name, status);
     }
-    await recordVerification(artifactRoot, verifierRunnerId, verifyStatus, verify);
+    await recordVerificationFile(artifactRoot, verify, { runnerId: verifierRunnerId, status: verifyStatus });
 
     const { manifest } = await loadManifestFromArtifactRoot(artifactRoot);
     const policy = policyPath ? await loadPolicyFile(policyPath) : undefined;
@@ -154,10 +156,70 @@ try {
     process.exit(0);
   }
 
+  if (command === "kswarm-run") {
+    if (!args.includes("--offline")) {
+      throw new Error("kswarm-run currently requires --offline; live KSwarm adapters are provided outside core");
+    }
+    const previewPath = requireOption(args, "--preview", "kswarm-run");
+    const planPath = requireOption(args, "--plan", "kswarm-run");
+    const reviewInputs = parseKeyValueOptions(readOptions(args, "--review"), "--review");
+    const decisionPath = requireOption(args, "--decision", "kswarm-run");
+    const checks = readOptions(args, "--check").map(parseCheckOption);
+    const verifyPath = readOption(args, "--verify");
+    const verifierRunnerId = readOption(args, "--verifier-runner-id");
+    const verifyStatus = readOption(args, "--verify-status") || "verified";
+    if (verifyPath && !verifierRunnerId) {
+      throw new Error("kswarm-run requires --verifier-runner-id <id> when --verify is provided");
+    }
+
+    const preview = JSON.parse(await readFile(previewPath, "utf8"));
+    const runtimePlan = JSON.parse(await readFile(planPath, "utf8"));
+    const offlineKswarm = createOfflineKswarmClient();
+    const result = await runKswarmRuntimePlan({
+      preview,
+      runtimePlan,
+      kswarmClient: offlineKswarm,
+      reviewerRunner: async ({ reviewer }) => {
+        const input = reviewInputs.get(reviewer.runnerId);
+        if (!input) {
+          throw new Error(`kswarm-run missing --review ${reviewer.runnerId}=<path>`);
+        }
+        return readFile(input, "utf8");
+      },
+      decisionProvider: async () => readFile(decisionPath, "utf8"),
+      checkRunner: async () => checks,
+      verifierRunner: verifyPath
+        ? async () => ({
+            runnerId: verifierRunnerId,
+            status: verifyStatus,
+            markdown: await readFile(verifyPath, "utf8")
+          })
+        : undefined
+    });
+
+    console.log(
+      JSON.stringify(
+        {
+          status: result.gate.status,
+          artifactRoot: runtimePlan.artifactRoot,
+          workflowRunId: result.workflowRunId,
+          gate: result.gate,
+          terminal: result.terminal,
+          offlineKswarm: {
+            calls: offlineKswarm.calls
+          }
+        },
+        null,
+        2
+      )
+    );
+    process.exit(result.gate.exitCode);
+  }
+
   if (command === "write-review") {
     const artifactRoot = requireOption(args, "--artifact-root", "write-review");
     const input = requireOption(args, "--input", "write-review");
-    const output = await writeReviewArtifact(artifactRoot, input);
+    const output = await writeReviewFileToArtifactRoot(artifactRoot, input);
 
     console.log(
       JSON.stringify(
@@ -184,7 +246,7 @@ try {
   if (command === "decide") {
     const artifactRoot = requireOption(args, "--artifact-root", "decide");
     const input = requireOption(args, "--input", "decide");
-    const artifact = await recordDecision(artifactRoot, input);
+    const artifact = await recordDecisionFile(artifactRoot, input);
     console.log(JSON.stringify({ status: "decision_recorded", artifact }, null, 2));
     process.exit(0);
   }
@@ -193,7 +255,7 @@ try {
     const artifactRoot = requireOption(args, "--artifact-root", "record-check");
     const name = requireOption(args, "--name", "record-check");
     const status = requireOption(args, "--status", "record-check");
-    await recordCheck(artifactRoot, name, status);
+    await recordCheckResult(artifactRoot, name, status);
     console.log(JSON.stringify({ status: "check_recorded", name }, null, 2));
     process.exit(0);
   }
@@ -203,7 +265,7 @@ try {
     const runnerId = requireOption(args, "--runner-id", "verify");
     const status = requireOption(args, "--status", "verify");
     const input = requireOption(args, "--input", "verify");
-    const artifact = await recordVerification(artifactRoot, runnerId, status, input);
+    const artifact = await recordVerificationFile(artifactRoot, input, { runnerId, status });
     console.log(JSON.stringify({ status: "verification_recorded", artifact }, null, 2));
     process.exit(0);
   }
@@ -281,101 +343,6 @@ function requireOption(args, name, commandName) {
   return value;
 }
 
-async function writeReviewArtifact(artifactRoot, input) {
-  const markdown = await readFile(input, "utf8");
-  const review = parseReviewArtifact(markdown);
-  const artifactName = `${safeArtifactName(review.runnerId || basename(input))}.md`;
-  const artifact = join("reviews", artifactName);
-  await mkdir(join(artifactRoot, "reviews"), { recursive: true });
-  await writeFile(join(artifactRoot, artifact), markdown, "utf8");
-
-  const { manifest } = await loadManifestFromArtifactRoot(artifactRoot);
-  const reviewers = manifest.reviewers.filter((item) => item.runnerId !== review.runnerId);
-  reviewers.push({
-    runnerId: review.runnerId,
-    status: review.status,
-    artifact,
-    contextRead: review.contextRead,
-    contextConfidence: review.contextConfidence,
-    contextGaps: review.contextGaps,
-    contextProvenance: review.contextProvenance,
-    principleAlignment: review.principleAlignment
-  });
-  reviewers.sort((a, b) => a.runnerId.localeCompare(b.runnerId));
-
-  const findings = manifest.findings.filter((item) => item.sourceRunnerId !== review.runnerId);
-  findings.push(...review.findings);
-
-  await saveManifestToArtifactRoot(artifactRoot, {
-    ...manifest,
-    reviewers,
-    findings
-  });
-
-  return {
-    runnerId: review.runnerId,
-    artifact,
-    findingCount: review.findings.length
-  };
-}
-
-async function synthesizeArtifactRoot(artifactRoot) {
-  const { manifest } = await loadManifestFromArtifactRoot(artifactRoot);
-  const findings = synthesizeFindings(manifest.findings);
-  const contextGaps = manifest.reviewers
-    .filter((reviewer) => Array.isArray(reviewer.contextGaps) && reviewer.contextGaps.length > 0)
-    .map((reviewer) => ({ runnerId: reviewer.runnerId, gaps: reviewer.contextGaps }));
-  const summary = renderSummaryMarkdown({ runId: manifest.runId, findings, contextGaps });
-  const artifact = "summary.md";
-  await writeFile(join(artifactRoot, artifact), summary, "utf8");
-  await saveManifestToArtifactRoot(artifactRoot, {
-    ...manifest,
-    findings,
-    synthesis: {
-      artifact,
-      status: "completed"
-    }
-  });
-  return { artifact, findingCount: findings.length };
-}
-
-async function recordDecision(artifactRoot, input) {
-  const artifact = "decision.md";
-  await writeFile(join(artifactRoot, artifact), await readFile(input, "utf8"), "utf8");
-  const { manifest } = await loadManifestFromArtifactRoot(artifactRoot);
-  await saveManifestToArtifactRoot(artifactRoot, {
-    ...manifest,
-    humanDecision: {
-      artifact,
-      status: "recorded"
-    }
-  });
-  return artifact;
-}
-
-async function recordCheck(artifactRoot, name, status) {
-  const { manifest } = await loadManifestFromArtifactRoot(artifactRoot);
-  const requiredChecks = manifest.requiredChecks.filter((check) => check.name !== name);
-  requiredChecks.push({ name, status });
-  requiredChecks.sort((a, b) => a.name.localeCompare(b.name));
-  await saveManifestToArtifactRoot(artifactRoot, { ...manifest, requiredChecks });
-}
-
-async function recordVerification(artifactRoot, runnerId, status, input) {
-  const artifact = "verify.md";
-  await writeFile(join(artifactRoot, artifact), await readFile(input, "utf8"), "utf8");
-  const { manifest } = await loadManifestFromArtifactRoot(artifactRoot);
-  await saveManifestToArtifactRoot(artifactRoot, {
-    ...manifest,
-    verification: {
-      runnerId,
-      status,
-      artifact
-    }
-  });
-  return artifact;
-}
-
 function parseCheckOption(value) {
   const separator = value.indexOf("=");
   if (separator === -1) {
@@ -386,6 +353,18 @@ function parseCheckOption(value) {
     name: value.slice(0, separator),
     status: value.slice(separator + 1)
   };
+}
+
+function parseKeyValueOptions(values, name) {
+  const result = new Map();
+  for (const value of values) {
+    const separator = value.indexOf("=");
+    if (separator === -1) {
+      throw new Error(`${name} must use <key>=<value>`);
+    }
+    result.set(value.slice(0, separator), value.slice(separator + 1));
+  }
+  return result;
 }
 
 function printHelp() {
@@ -402,6 +381,7 @@ Usage:
   kualityforge gate --manifest <path>
   kualityforge gate --artifact-root <path> [--policy <path>]
   kualityforge kswarm-preview --project-id <id> --run-id <id> --artifact-root <path> --reviewer <runner-id>... [--project-root <path>] [--docs-root <path>] [--quality-principles <json>] [--change-goal <text>] [--target <path>] [--requested-by <id>]
+  kualityforge kswarm-run --offline --preview <preview.json> --plan <runtime-plan.json> --review <runner-id=review.md>... --decision <decision.md> --check <name=status> [--verify <verify.md> --verifier-runner-id <id>]
   kualityforge eval [--corpus <dir>] [--report <path>]
 `);
 }
