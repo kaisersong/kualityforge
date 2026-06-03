@@ -37,6 +37,7 @@ test("CLI can initialize, collect clean reviews, decide, verify, and pass gate",
       await readFile(join(root, "manifest.json"), "utf8")
     );
     assert.equal(manifestAfterSynthesis.reviewerScores.artifact, "scores.json");
+    assert.ok(Array.isArray(manifestAfterSynthesis.reviewerScores.scores));
     assert.equal(manifestAfterSynthesis.inducedPrinciples.artifact, "induced-principles.json");
 
     const decision = join(root, "decision-input.md");

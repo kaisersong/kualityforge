@@ -126,7 +126,11 @@ export async function synthesizeArtifactRoot(artifactRoot) {
     },
     reviewerScores: {
       artifact: scoresArtifact,
-      status: "completed"
+      status: "completed",
+      scores: (reviewerScores.scores || []).map((score) => ({
+        runnerId: score.runnerId,
+        overall: score.overall
+      }))
     },
     inducedPrinciples: {
       artifact: inducedPrinciplesArtifact,
