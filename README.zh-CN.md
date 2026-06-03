@@ -432,6 +432,10 @@ kualityforge kswarm-run --offline \
 - [质量记录](docs/quality/README.md)
 - [Eval 记录](docs/evals/README.md)
 
+报告模板规范随仓库一起追踪（不在 `docs` symlink 下），用户可据此撰写报告：
+
+- [报告模板规范](templates/report-template.md)
+
 ---
 
 ## 开发规则

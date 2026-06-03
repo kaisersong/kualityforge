@@ -432,6 +432,10 @@ Main docs:
 - [Quality records](docs/quality/README.md)
 - [Eval records](docs/evals/README.md)
 
+The report template spec is tracked in the repository itself (not under the `docs` symlink) so users can follow it to author reports:
+
+- [Report template spec](templates/report-template.md)
+
 ---
 
 ## Development Rules
