@@ -87,3 +87,27 @@ test("computeChangeset requires a projectRoot", async () => {
   assert.equal(changeset.available, false);
   assert.match(changeset.reason, /projectRoot/);
 });
+
+test("renderChangesetMarkdown uses a fence that cannot be broken by backticks in the patch", () => {
+  const changeset = {
+    schemaVersion: 1,
+    available: true,
+    base: "HEAD",
+    head: "WORKTREE",
+    baseSha: "abc1234567890",
+    headSha: "def1234567890",
+    dirty: true,
+    fileCount: 1,
+    files: [{ path: "a.md", status: "M", added: 1, deleted: 0 }],
+    totals: { added: 1, deleted: 0 },
+    patch: "+const fence = \"```diff\"; // contains a triple backtick run\n",
+    patchBytes: 50,
+    patchTruncated: false,
+    generatedAt: "2026-06-03T00:00:00.000Z"
+  };
+  const markdown = renderChangesetMarkdown(changeset);
+  // The opening fence must be longer than any backtick run inside the patch.
+  assert.match(markdown, /````+diff/);
+  // The patch body (with its embedded triple backticks) must be present intact.
+  assert.ok(markdown.includes("```diff\"; // contains a triple backtick run"));
+});

@@ -154,9 +154,11 @@ export function renderChangesetMarkdown(changeset) {
   lines.push("");
 
   lines.push("## Unified Diff", "");
-  lines.push("```diff");
-  lines.push(changeset.patch.replace(/\n$/, ""));
-  lines.push("```");
+  const patchBody = changeset.patch.replace(/\n$/, "");
+  const fence = "`".repeat(Math.max(3, longestBacktickRun(patchBody) + 1));
+  lines.push(`${fence}diff`);
+  lines.push(patchBody);
+  lines.push(fence);
   lines.push("");
 
   return `${lines.join("\n")}\n`;
@@ -245,6 +247,19 @@ function mergeFileStats(statusMap, numstatMap) {
   }
   files.sort((a, b) => a.path.localeCompare(b.path));
   return files;
+}
+
+function longestBacktickRun(text) {
+  let longest = 0;
+  const matches = String(text).match(/`+/g);
+  if (matches) {
+    for (const run of matches) {
+      if (run.length > longest) {
+        longest = run.length;
+      }
+    }
+  }
+  return longest;
 }
 
 function countAddedLines(diff) {

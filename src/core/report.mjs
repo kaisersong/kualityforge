@@ -2,11 +2,12 @@
 // gate result, frozen changeset, findings, reviewer scores, and induced
 // principle candidates. Pure rendering — no IO. Std-lib only.
 
-export const DEFAULT_REPORT_OUT_DIR = "/Users/song/projects/mydocs/kualityforge";
+export const DEFAULT_REPORT_OUT_DIR = "kualityforge-reports";
 
 // Resolves the report output directory. Precedence: explicit value, then the
-// KUALITYFORGE_REPORT_OUT_DIR environment variable, then the built-in default.
-export function resolveReportOutDir(explicit, env = process.env) {
+// KUALITYFORGE_REPORT_OUT_DIR environment variable, then the supplied fallback
+// (which defaults to the portable, relative DEFAULT_REPORT_OUT_DIR).
+export function resolveReportOutDir(explicit, env = process.env, fallback = DEFAULT_REPORT_OUT_DIR) {
   if (typeof explicit === "string" && explicit.trim()) {
     return explicit.trim();
   }
@@ -14,7 +15,7 @@ export function resolveReportOutDir(explicit, env = process.env) {
   if (typeof fromEnv === "string" && fromEnv.trim()) {
     return fromEnv.trim();
   }
-  return DEFAULT_REPORT_OUT_DIR;
+  return fallback;
 }
 
 export function buildReportModel({
@@ -44,19 +45,16 @@ export function buildReportModel({
 
 export function renderReportMarkdown(model) {
   const lines = [`# KualityForge Report: ${model.runId}`, ""];
-  lines.push(`- Profile: ${model.profile}`);
-  lines.push(`- Gate status: ${model.gateStatus}`);
+
+  lines.push("| Field | Value |");
+  lines.push("| --- | --- |");
+  lines.push(`| Profile | ${mdCell(model.profile)} |`);
+  lines.push(`| Gate status | ${mdCell(model.gateStatus)} |`);
   if (model.gateReasons.length > 0) {
-    lines.push("- Gate reasons:");
-    for (const reason of model.gateReasons) {
-      lines.push(`  - ${reason}`);
-    }
+    lines.push(`| Gate reasons | ${model.gateReasons.map(mdCell).join("<br>")} |`);
   }
   if (model.gateWarnings.length > 0) {
-    lines.push("- Gate warnings:");
-    for (const warning of model.gateWarnings) {
-      lines.push(`  - ${warning}`);
-    }
+    lines.push(`| Gate warnings | ${model.gateWarnings.map(mdCell).join("<br>")} |`);
   }
   lines.push("");
 
@@ -67,30 +65,54 @@ export function renderReportMarkdown(model) {
         ? `No changeset was frozen (${model.changeset.reason}).`
         : "No changeset was frozen."
     );
+    lines.push("");
   } else {
-    lines.push(`- Base: ${model.changeset.base} (${shortSha(model.changeset.baseSha)})`);
-    lines.push(`- Head: ${model.changeset.head} (${shortSha(model.changeset.headSha)})`);
-    lines.push(`- Files changed: ${model.changeset.fileCount}`);
-    if (model.changeset.patchTruncated) {
-      lines.push("- NOTE: patch was truncated; some hunks were out of scope.");
-    }
-    for (const file of model.changeset.files || []) {
-      lines.push(`  - ${file.status} ${file.path}`);
+    lines.push("| Field | Value |");
+    lines.push("| --- | --- |");
+    lines.push(`| Base | ${mdCell(model.changeset.base)} (${mdCell(shortSha(model.changeset.baseSha))}) |`);
+    lines.push(`| Head | ${mdCell(model.changeset.head)} (${mdCell(shortSha(model.changeset.headSha))}) |`);
+    lines.push(`| Files changed | ${mdCell(String(model.changeset.fileCount))} |`);
+    lines.push(`| Patch truncated | ${model.changeset.patchTruncated ? "yes (some hunks out of scope)" : "no"} |`);
+    lines.push("");
+    const files = model.changeset.files || [];
+    if (files.length > 0) {
+      lines.push("| Status | Path |");
+      lines.push("| --- | --- |");
+      for (const file of files) {
+        lines.push(`| ${mdCell(file.status)} | ${mdCell(file.path)} |`);
+      }
+      lines.push("");
     }
   }
-  lines.push("");
 
-  lines.push("## Findings", "");
+  lines.push("## Findings (F#)", "");
   if (model.findings.length === 0) {
     lines.push("No findings were reported.");
   } else {
-    for (const finding of model.findings) {
-      const reviewers = (finding.sourceRunnerIds || []).join(", ");
-      lines.push(`- ${finding.id} ${finding.title} [${finding.severity}]`);
-      lines.push(`  - Status: ${finding.status}`);
-      lines.push(`  - Reviewers: ${reviewers || finding.sourceRunnerId || "unknown"}`);
-      lines.push(`  - Reviewer count: ${finding.reviewerCount || 0}`);
-    }
+    lines.push("| # | Title | Severity | Status | Reviewers | Count |");
+    lines.push("| --- | --- | --- | --- | --- | --- |");
+    model.findings.forEach((finding, index) => {
+      const reviewers = (finding.sourceRunnerIds || []).join(", ") || finding.sourceRunnerId || "unknown";
+      lines.push(
+        `| F${index + 1} | ${mdCell(finding.title)} | ${mdCell(finding.severity)} | ${mdCell(finding.status)} | ${mdCell(reviewers)} | ${finding.reviewerCount || 0} |`
+      );
+    });
+  }
+  lines.push("");
+
+  const consensusFindings = model.findings.filter((finding) => (finding.reviewerCount || 0) >= 2);
+  lines.push("## Consensus Findings (G#)", "");
+  if (consensusFindings.length === 0) {
+    lines.push("No findings reached consensus (>= 2 reviewers).");
+  } else {
+    lines.push("| # | Title | Severity | Reviewers | Count |");
+    lines.push("| --- | --- | --- | --- | --- |");
+    consensusFindings.forEach((finding, index) => {
+      const reviewers = (finding.sourceRunnerIds || []).join(", ") || finding.sourceRunnerId || "unknown";
+      lines.push(
+        `| G${index + 1} | ${mdCell(finding.title)} | ${mdCell(finding.severity)} | ${mdCell(reviewers)} | ${finding.reviewerCount || 0} |`
+      );
+    });
   }
   lines.push("");
 
@@ -105,7 +127,7 @@ export function renderReportMarkdown(model) {
         ? Math.round((score.stats.corroboratedCount / score.stats.findingCount) * 100)
         : 0;
       lines.push(
-        `| ${score.runnerId} | ${score.overall} | ${score.stats.findingCount} | ${consensusPct}% | ${score.role || "-"} |`
+        `| ${mdCell(score.runnerId)} | ${score.overall} | ${score.stats.findingCount} | ${consensusPct}% | ${mdCell(score.role || "-")} |`
       );
     }
     if (model.ranking.length > 0) {
@@ -115,14 +137,28 @@ export function renderReportMarkdown(model) {
   }
   lines.push("");
 
-  lines.push("## Induced Principle Candidates (advisory)", "");
+  lines.push("## Induced Principle Candidates (P#, advisory)", "");
   if (model.inducedCandidates.length === 0) {
     lines.push("No candidate principles were induced.");
   } else {
-    for (const candidate of model.inducedCandidates) {
-      lines.push(`- ${candidate.id} (${candidate.priority}): ${candidate.statement}`);
-    }
+    lines.push("| # | Priority | Statement | Id |");
+    lines.push("| --- | --- | --- | --- |");
+    model.inducedCandidates.forEach((candidate, index) => {
+      lines.push(
+        `| P${index + 1} | ${mdCell(candidate.priority)} | ${mdCell(candidate.statement)} | ${mdCell(candidate.id)} |`
+      );
+    });
   }
+  lines.push("");
+
+  lines.push("## Decisions & Verification", "");
+  lines.push("| Field | Value |");
+  lines.push("| --- | --- |");
+  lines.push(`| Gate decision | ${mdCell(model.gateStatus)} |`);
+  lines.push(`| Findings | ${model.findings.length} total, ${consensusFindings.length} at consensus |`);
+  lines.push(
+    `| Induced candidates | ${model.inducedCandidates.length} (advisory; human decides adoption) |`
+  );
   lines.push("");
 
   return `${lines.join("\n")}\n`;
@@ -167,32 +203,55 @@ export function renderReportHtml(model) {
       )}</p>`
     );
   } else {
-    parts.push("<ul>");
-    parts.push(`<li>Base: ${esc(model.changeset.base)} (${esc(shortSha(model.changeset.baseSha))})</li>`);
-    parts.push(`<li>Head: ${esc(model.changeset.head)} (${esc(shortSha(model.changeset.headSha))})</li>`);
-    parts.push(`<li>Files changed: ${esc(String(model.changeset.fileCount))}</li>`);
-    if (model.changeset.patchTruncated) {
-      parts.push("<li>NOTE: patch was truncated; some hunks were out of scope.</li>");
+    parts.push("<table><tbody>");
+    parts.push(`<tr><th>Base</th><td>${esc(model.changeset.base)} (${esc(shortSha(model.changeset.baseSha))})</td></tr>`);
+    parts.push(`<tr><th>Head</th><td>${esc(model.changeset.head)} (${esc(shortSha(model.changeset.headSha))})</td></tr>`);
+    parts.push(`<tr><th>Files changed</th><td>${esc(String(model.changeset.fileCount))}</td></tr>`);
+    parts.push(
+      `<tr><th>Patch truncated</th><td>${model.changeset.patchTruncated ? "yes (some hunks out of scope)" : "no"}</td></tr>`
+    );
+    parts.push("</tbody></table>");
+    const files = model.changeset.files || [];
+    if (files.length > 0) {
+      parts.push("<table><thead><tr><th>Status</th><th>Path</th></tr></thead><tbody>");
+      for (const file of files) {
+        parts.push(`<tr><td>${esc(file.status)}</td><td>${esc(file.path)}</td></tr>`);
+      }
+      parts.push("</tbody></table>");
     }
-    parts.push("</ul><ul>");
-    for (const file of model.changeset.files || []) {
-      parts.push(`<li>${esc(file.status)} ${esc(file.path)}</li>`);
-    }
-    parts.push("</ul>");
   }
 
-  parts.push("<h2>Findings</h2>");
+  parts.push("<h2>Findings (F#)</h2>");
   if (model.findings.length === 0) {
     parts.push("<p>No findings were reported.</p>");
   } else {
-    parts.push("<ul>");
-    for (const finding of model.findings) {
+    parts.push(
+      "<table><thead><tr><th>#</th><th>Title</th><th>Severity</th><th>Status</th><th>Reviewers</th><th>Count</th><th>Id</th></tr></thead><tbody>"
+    );
+    model.findings.forEach((finding, index) => {
       const reviewers = (finding.sourceRunnerIds || []).join(", ") || finding.sourceRunnerId || "unknown";
       parts.push(
-        `<li><strong>${esc(finding.id)}</strong> ${esc(finding.title)} [${esc(finding.severity)}] — status ${esc(finding.status)}, reviewers ${esc(reviewers)} (count ${esc(String(finding.reviewerCount || 0))})</li>`
+        `<tr><td>F${index + 1}</td><td>${esc(finding.title)}</td><td>${esc(finding.severity)}</td><td>${esc(finding.status)}</td><td>${esc(reviewers)}</td><td>${esc(String(finding.reviewerCount || 0))}</td><td><code>${esc(finding.id)}</code></td></tr>`
       );
-    }
-    parts.push("</ul>");
+    });
+    parts.push("</tbody></table>");
+  }
+
+  const consensusFindings = model.findings.filter((finding) => (finding.reviewerCount || 0) >= 2);
+  parts.push("<h2>Consensus Findings (G#)</h2>");
+  if (consensusFindings.length === 0) {
+    parts.push("<p>No findings reached consensus (&gt;= 2 reviewers).</p>");
+  } else {
+    parts.push(
+      "<table><thead><tr><th>#</th><th>Title</th><th>Severity</th><th>Reviewers</th><th>Count</th></tr></thead><tbody>"
+    );
+    consensusFindings.forEach((finding, index) => {
+      const reviewers = (finding.sourceRunnerIds || []).join(", ") || finding.sourceRunnerId || "unknown";
+      parts.push(
+        `<tr><td>G${index + 1}</td><td>${esc(finding.title)}</td><td>${esc(finding.severity)}</td><td>${esc(reviewers)}</td><td>${esc(String(finding.reviewerCount || 0))}</td></tr>`
+      );
+    });
+    parts.push("</tbody></table>");
   }
 
   parts.push("<h2>Reviewer Scores</h2>");
@@ -214,18 +273,28 @@ export function renderReportHtml(model) {
     }
   }
 
-  parts.push('<h2 class="advisory">Induced Principle Candidates (advisory)</h2>');
+  parts.push('<h2 class="advisory">Induced Principle Candidates (P#, advisory)</h2>');
   if (model.inducedCandidates.length === 0) {
     parts.push("<p>No candidate principles were induced.</p>");
   } else {
-    parts.push("<ul>");
-    for (const candidate of model.inducedCandidates) {
+    parts.push(
+      "<table><thead><tr><th>#</th><th>Priority</th><th>Statement</th><th>Id</th></tr></thead><tbody>"
+    );
+    model.inducedCandidates.forEach((candidate, index) => {
       parts.push(
-        `<li><strong>${esc(candidate.id)}</strong> (${esc(candidate.priority)}): ${esc(candidate.statement)}</li>`
+        `<tr><td>P${index + 1}</td><td>${esc(candidate.priority)}</td><td>${esc(candidate.statement)}</td><td><code>${esc(candidate.id)}</code></td></tr>`
       );
-    }
-    parts.push("</ul>");
+    });
+    parts.push("</tbody></table>");
   }
+
+  parts.push("<h2>Decisions &amp; Verification</h2><ul>");
+  parts.push(`<li>Gate decision: ${esc(model.gateStatus)}</li>`);
+  parts.push(`<li>Findings: ${esc(String(model.findings.length))} total, ${esc(String(consensusFindings.length))} at consensus.</li>`);
+  parts.push(
+    `<li>Induced principle candidates: ${esc(String(model.inducedCandidates.length))} (advisory; human decides adoption).</li>`
+  );
+  parts.push("</ul>");
 
   parts.push("</body></html>");
   return `${parts.join("\n")}\n`;
@@ -233,6 +302,13 @@ export function renderReportHtml(model) {
 
 function shortSha(sha) {
   return typeof sha === "string" && sha.length >= 7 ? sha.slice(0, 12) : sha || "unknown";
+}
+
+function mdCell(value) {
+  return String(value ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/\|/g, "\\|")
+    .replace(/\r?\n/g, "<br>");
 }
 
 function esc(value) {

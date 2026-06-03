@@ -50,7 +50,7 @@ export function scoreReviewers({
     const dimensions = {
       protocolCompliance: scoreProtocol(reviewer, outcome),
       contextConfidence: scoreConfidence(reviewer.contextConfidence),
-      contextRead: scoreContextRead(reviewer.contextRead),
+      contextRead: scoreContextRead(reviewer.contextRead, reviewer.contextRequired),
       contextGapPenalty: scoreContextGaps(reviewer.contextGaps),
       findingSubstance: scoreSubstance(ownFindings),
       consensusRate: scoreConsensus(ownFindings, corroboratedKeys)
@@ -141,16 +141,20 @@ function scoreConfidence(confidence) {
   }
 }
 
-function scoreContextRead(contextRead) {
-  if (!contextRead || typeof contextRead !== "object") {
+function scoreContextRead(contextRead, requiredKeys) {
+  const read = contextRead && typeof contextRead === "object" ? contextRead : {};
+  const required = Array.isArray(requiredKeys) ? requiredKeys : [];
+  const keys = new Set([...Object.keys(read), ...required]);
+  if (keys.size === 0) {
     return 0;
   }
-  const keys = Object.keys(contextRead);
-  if (keys.length === 0) {
-    return 0;
+  let trueCount = 0;
+  for (const key of keys) {
+    if (read[key] === true) {
+      trueCount += 1;
+    }
   }
-  const trueCount = keys.filter((key) => contextRead[key] === true).length;
-  return trueCount / keys.length;
+  return trueCount / keys.size;
 }
 
 function scoreContextGaps(contextGaps) {

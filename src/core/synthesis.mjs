@@ -41,7 +41,7 @@ export function synthesizeFindings(findings) {
   });
 }
 
-export function renderSummaryMarkdown({ runId, findings, contextGaps = [], reviewPolicy = null, reviewOutcomes = [], reviewerScores = null, inducedPrinciples = null }) {
+export function renderSummaryMarkdown({ runId, findings, contextGaps = [], reviewPolicy = null, reviewOutcomes = [], reviewerScores = null, inducedPrinciples = null, reviewers = [] }) {
   const lines = [`# KualityForge Summary: ${runId}`, ""];
 
   if (contextGaps.length > 0) {
@@ -57,7 +57,20 @@ export function renderSummaryMarkdown({ runId, findings, contextGaps = [], revie
   if (reviewPolicy && typeof reviewPolicy === "object") {
     const outcomes = Array.isArray(reviewOutcomes) ? reviewOutcomes : [];
     const outcomeByRunner = new Map(outcomes.map((outcome) => [outcome.runnerId, outcome]));
-    const succeeded = (runnerId) => outcomeByRunner.get(runnerId)?.status === "succeeded";
+    const completedReviewers = new Set(
+      (Array.isArray(reviewers) ? reviewers : [])
+        .filter((reviewer) => reviewer.status === "completed")
+        .map((reviewer) => reviewer.runnerId)
+    );
+    const succeeded = (runnerId) => {
+      const outcome = outcomeByRunner.get(runnerId);
+      if (outcome) {
+        return outcome.status === "succeeded";
+      }
+      // No explicit outcome (e.g. required_all without reviewOutcomes): fall back
+      // to whether the reviewer completed so completed reviewers aren't shown absent.
+      return completedReviewers.has(runnerId);
+    };
     const required = [...(reviewPolicy.requiredReviewers || [])].sort();
     const advisory = [...(reviewPolicy.advisoryReviewers || [])].sort();
 

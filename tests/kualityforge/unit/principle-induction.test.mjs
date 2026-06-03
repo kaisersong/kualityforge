@@ -37,6 +37,31 @@ test("inducePrinciples excludes principles already in the existing set", () => {
   assert.equal(result.clusters[0].matchedExistingPrincipleId, "P-1");
 });
 
+test("inducePrinciples deduplicates candidate ids that normalize to the same slug", () => {
+  const synthesized = [
+    { id: "QF-1", type: "code", duplicateKey: "foo bar", title: "Foo bar one", severity: "warning", reviewerCount: 1 },
+    { id: "QF-2", type: "code", duplicateKey: "foo/bar", title: "Foo bar two", severity: "warning", reviewerCount: 1 }
+  ];
+  const result = inducePrinciples({ synthesizedFindings: synthesized });
+  const ids = result.candidates.map((candidate) => candidate.id);
+  assert.equal(new Set(ids).size, ids.length, "candidate ids must be unique");
+  assert.ok(ids.some((id) => /-2$/.test(id)), "a colliding id should be suffixed");
+});
+
+test("inducePrinciples suffixed ids do not collide with existing principle ids", () => {
+  const synthesized = [
+    { id: "QF-1", type: "code", duplicateKey: "foo", title: "Foo one", severity: "warning", reviewerCount: 1 },
+    { id: "QF-2", type: "code", duplicateKey: "foo", title: "Foo two", severity: "warning", reviewerCount: 1 }
+  ];
+  const result = inducePrinciples({
+    synthesizedFindings: synthesized,
+    existingPrinciples: [{ id: "induced-foo-2" }]
+  });
+  const ids = result.candidates.map((candidate) => candidate.id);
+  assert.equal(new Set(ids).size, ids.length, "candidate ids must be unique");
+  assert.ok(!ids.includes("induced-foo-2"), "must not reuse an existing principle id");
+});
+
 test("induced candidates satisfy the quality-principles schema required fields", async () => {
   const schema = JSON.parse(await readFile(schemaPath, "utf8"));
   const required = schema.properties.principles.items.required;

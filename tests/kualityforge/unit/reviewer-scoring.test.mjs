@@ -65,3 +65,28 @@ test("failed outcome zeroes protocol compliance", () => {
   const result = scoreReviewers({ reviewers, findings: [], synthesizedFindings: [], reviewOutcomes });
   assert.equal(result.scores[0].dimensions.protocolCompliance, 0);
 });
+
+test("contextRead penalizes unacknowledged required context keys", () => {
+  const reviewers = [
+    {
+      runnerId: "partial",
+      status: "completed",
+      contextConfidence: "high",
+      contextRead: { project_brief: true },
+      contextRequired: ["project_brief", "user_quality_principles"],
+      contextGaps: []
+    },
+    {
+      runnerId: "full",
+      status: "completed",
+      contextConfidence: "high",
+      contextRead: { project_brief: true, user_quality_principles: true },
+      contextRequired: ["project_brief", "user_quality_principles"],
+      contextGaps: []
+    }
+  ];
+  const result = scoreReviewers({ reviewers, findings: [], synthesizedFindings: [], reviewOutcomes: [] });
+  const byId = new Map(result.scores.map((score) => [score.runnerId, score]));
+  assert.equal(byId.get("partial").dimensions.contextRead, 0.5);
+  assert.equal(byId.get("full").dimensions.contextRead, 1);
+});

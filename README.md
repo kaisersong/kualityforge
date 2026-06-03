@@ -23,6 +23,10 @@ KualityForge is in its bootstrap phase. The repository currently contains the fi
 - Context pack freezing through `kualityforge init --project-root ... --docs-root ... --quality-principles ...`.
 - KSwarm dynamic workflow preview and runtime plan generation through `kualityforge kswarm-preview`.
 - KSwarm runtime executor core and offline smoke command through `kualityforge kswarm-run --offline`.
+- Frozen unified changeset so every reviewer judges the identical file set, via `init --diff-base/--diff-head/--diff-max-patch-bytes` and `context/changeset.{json,md}`.
+- Advisory per-reviewer scoring written to `scores.json` (deterministic, never blocks the gate).
+- Per-round induced quality-principle candidates written to `induced-principles.{json,md}` (advisory; human decides adoption).
+- Human report generation through `kualityforge report` (Markdown default, `--html` optional) with a fixed F#/G#/P# table template.
 - Review artifact context acknowledgement, context provenance, context gaps, and quality principle violation parsing.
 - Artifact reference validation rejects absolute paths and `..` traversal.
 - Fail-closed reducer behavior for incomplete quality evidence.
@@ -289,7 +293,7 @@ An incomplete run returns a non-zero exit code:
 Currently implemented:
 
 ```bash
-kualityforge init --artifact-root <path> --run-id <id> [--profile <name>]
+kualityforge init --artifact-root <path> --run-id <id> [--profile <name>] [--diff-base <ref>] [--diff-head <ref|WORKTREE>] [--diff-max-patch-bytes <n>]
 kualityforge run --artifact-root <path> --run-id <id> --review <review.md>... --decision <decision.md> --check <name=status> --verify <verify.md> --verifier-runner-id <id>
 kualityforge write-review --artifact-root <path> --input <review.md>
 kualityforge synthesize --artifact-root <path>
@@ -298,10 +302,13 @@ kualityforge record-check --artifact-root <path> --name <name> --status <status>
 kualityforge verify --artifact-root <path> --runner-id <id> --status <status> --input <verify.md>
 kualityforge gate --manifest <path>
 kualityforge gate --artifact-root <path>
+kualityforge report --artifact-root <path> [--out <dir>|--report-out <dir>] [--html]
 kualityforge kswarm-preview --project-id <id> --run-id <id> --artifact-root <path> --reviewer <runner-id>...
 kualityforge kswarm-run --offline --preview <preview.json> --plan <runtime-plan.json> --review <runner-id=review.md>... --decision <decision.md> --check <name=status> [--verify <verify.md> --verifier-runner-id <id>]
 kualityforge eval [--corpus <dir>] [--report <path>]
 ```
+
+The `report` command renders a human report aggregating the gate result, frozen changeset, findings (F#), consensus findings (G#), advisory reviewer scores, and induced principle candidates (P#). Output directory precedence is the `--out`/`--report-out` flag, then the `KUALITYFORGE_REPORT_OUT_DIR` env var, then the built-in default.
 
 Planned public commands:
 

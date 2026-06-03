@@ -23,6 +23,10 @@ KualityForge 还在项目启动阶段。当前仓库已经包含第一片 determ
 - 通过 `kualityforge init --project-root ... --docs-root ... --quality-principles ...` 冻结 context pack。
 - 通过 `kualityforge kswarm-preview` 生成 KSwarm dynamic workflow preview 和 runtime plan。
 - 通过 `kualityforge kswarm-run --offline` 执行 KSwarm runtime executor core 的离线 smoke。
+- 冻结统一变更集，使所有 reviewer 评审同一份文件集合；通过 `init --diff-base/--diff-head/--diff-max-patch-bytes` 与 `context/changeset.{json,md}` 实现。
+- 每个 reviewer 的咨询性评分写入 `scores.json`（确定性，不阻断 gate）。
+- 每轮归纳候选质量原则写入 `induced-principles.{json,md}`（咨询；是否纳入由人工决定）。
+- 通过 `kualityforge report` 生成人类可读报告（默认 Markdown，`--html` 可选），采用固定的 F#/G#/P# 表格模板。
 - review artifact 支持 context acknowledgement、context provenance、context gaps 和质量原则违背 finding。
 - artifact reference validation 会拒绝绝对路径和 `..` traversal。
 - 对证据不完整的质量运行执行 fail-closed reducer。
@@ -289,7 +293,7 @@ kualityforge gate --manifest path/to/manifest.json
 当前已实现：
 
 ```bash
-kualityforge init --artifact-root <path> --run-id <id> [--profile <name>]
+kualityforge init --artifact-root <path> --run-id <id> [--profile <name>] [--diff-base <ref>] [--diff-head <ref|WORKTREE>] [--diff-max-patch-bytes <n>]
 kualityforge run --artifact-root <path> --run-id <id> --review <review.md>... --decision <decision.md> --check <name=status> --verify <verify.md> --verifier-runner-id <id>
 kualityforge write-review --artifact-root <path> --input <review.md>
 kualityforge synthesize --artifact-root <path>
@@ -298,10 +302,13 @@ kualityforge record-check --artifact-root <path> --name <name> --status <status>
 kualityforge verify --artifact-root <path> --runner-id <id> --status <status> --input <verify.md>
 kualityforge gate --manifest <path>
 kualityforge gate --artifact-root <path>
+kualityforge report --artifact-root <path> [--out <dir>|--report-out <dir>] [--html]
 kualityforge kswarm-preview --project-id <id> --run-id <id> --artifact-root <path> --reviewer <runner-id>...
 kualityforge kswarm-run --offline --preview <preview.json> --plan <runtime-plan.json> --review <runner-id=review.md>... --decision <decision.md> --check <name=status> [--verify <verify.md> --verifier-runner-id <id>]
 kualityforge eval [--corpus <dir>] [--report <path>]
 ```
+
+`report` 命令渲染人类可读报告，聚合 gate 结果、冻结变更集、findings（F#）、共识 findings（G#）、咨询性 reviewer 评分与归纳候选原则（P#）。输出目录优先级：`--out`/`--report-out` 参数 → `KUALITYFORGE_REPORT_OUT_DIR` 环境变量 → 内置默认值。
 
 计划中的公开命令：
 

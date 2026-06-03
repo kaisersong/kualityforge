@@ -62,6 +62,19 @@ export function inducePrinciples({
     .map((cluster) => buildCandidate(cluster))
     .filter((candidate) => !existingIds.has(candidate.id));
 
+  const takenIds = new Set(existingIds);
+  for (const candidate of candidates) {
+    const baseId = candidate.id;
+    let resolvedId = baseId;
+    let suffix = 1;
+    while (takenIds.has(resolvedId)) {
+      suffix += 1;
+      resolvedId = `${baseId}-${suffix}`;
+    }
+    candidate.id = resolvedId;
+    takenIds.add(resolvedId);
+  }
+
   candidates.sort((a, b) => {
     const priorityDelta = priorityRank(b.priority) - priorityRank(a.priority);
     if (priorityDelta !== 0) {

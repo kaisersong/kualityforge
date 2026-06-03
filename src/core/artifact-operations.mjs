@@ -92,7 +92,8 @@ export async function synthesizeArtifactRoot(artifactRoot) {
     reviewPolicy: manifest.reviewPolicy || null,
     reviewOutcomes,
     reviewerScores,
-    inducedPrinciples: induced
+    inducedPrinciples: induced,
+    reviewers: manifest.reviewers || []
   });
 
   const artifact = "summary.md";
@@ -166,7 +167,7 @@ export async function writeReportFromArtifactRoot(artifactRoot, options = {}) {
     gate: options.gate || null
   });
 
-  const outDir = resolveReportOutDir(options.outDir);
+  const outDir = resolveReportOutDir(options.outDir, process.env, join(artifactRoot, "reports"));
   await mkdir(outDir, { recursive: true });
   const baseName = `${safeArtifactName(manifest.runId || "run")}-report`;
   const markdownPath = join(outDir, `${baseName}.md`);
