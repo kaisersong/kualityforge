@@ -44,6 +44,26 @@
         "mustPrincipleExceptionPolicy": { "type": "string" }
       }
     },
+    "review": {
+      "type": "object",
+      "properties": {
+        "mode": { "type": "string", "enum": ["required_all", "quorum"] },
+        "requiredReviewers": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "advisoryReviewers": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "quorumMembers": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "quorumMin": { "type": "integer", "minimum": 1 }
+      },
+      "required": ["mode"]
+    },
     "artifactRoot": { "type": "string" }
   }
 }

@@ -17,7 +17,8 @@
     "test:kualityforge:ci": "node --test tests/kualityforge/ci/*.test.mjs",
     "test:kualityforge:e2e": "node --test tests/kualityforge/e2e/*.test.mjs",
     "eval:kualityforge": "node src/cli/index.mjs eval",
-    "eval:kualityforge:model-assisted": "node src/cli/index.mjs eval --model-assisted"
+    "eval:kualityforge:model-assisted": "node src/cli/index.mjs eval --model-assisted",
+    "smoke:brokered": "node scripts/brokered-smoke.mjs"
   },
   "engines": {
     "node": ">=20"

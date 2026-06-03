@@ -2,15 +2,20 @@ import { readFile } from "node:fs/promises";
 import { DEFAULT_RELEASE_POLICY } from "./gate-reducer.mjs";
 
 export function normalizePolicy(policy = {}) {
-  return {
+  const normalized = {
     profile: policy.profile || "release",
     ...DEFAULT_RELEASE_POLICY,
     ...policy,
+    minReviewersExplicit: Object.prototype.hasOwnProperty.call(policy, "minReviewers"),
     context: {
       ...DEFAULT_RELEASE_POLICY.context,
       ...(policy.context || {})
     }
   };
+  if (policy.review !== undefined) {
+    normalized.review = policy.review;
+  }
+  return normalized;
 }
 
 export async function loadPolicyFile(policyPath) {

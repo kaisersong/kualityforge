@@ -73,6 +73,71 @@ test("kswarm-run --offline executes a runtime plan from local artifacts", async 
   }
 });
 
+test("kswarm-run requires an explicit mode", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kualityforge-cli-kswarm-mode-"));
+  try {
+    const { previewPath, planPath, decision } = await writeRunFixtures(root);
+    const result = spawnSync(
+      process.execPath,
+      [cliPath, "kswarm-run", "--preview", previewPath, "--plan", planPath, "--decision", decision],
+      { cwd: resolve("."), encoding: "utf8" }
+    );
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /requires --offline or --mode brokered/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("kswarm-run --mode brokered rejects --review", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kualityforge-cli-kswarm-brokered-"));
+  try {
+    const { previewPath, planPath, decision } = await writeRunFixtures(root);
+    const result = spawnSync(
+      process.execPath,
+      [
+        cliPath,
+        "kswarm-run",
+        "--mode",
+        "brokered",
+        "--kswarm-url",
+        "http://127.0.0.1:4319",
+        "--preview",
+        previewPath,
+        "--plan",
+        planPath,
+        "--decision",
+        decision,
+        "--review",
+        "codex:gpt-5=/tmp/x.md"
+      ],
+      { cwd: resolve("."), encoding: "utf8" }
+    );
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /only valid in offline mode/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+async function writeRunFixtures(root) {
+  const artifactRoot = join(root, "artifacts");
+  const workflowOptions = {
+    projectId: "proj-qf-cli-mode",
+    runId: "release-cli-mode",
+    artifactRoot,
+    reviewers: ["codex:gpt-5", "claude:sonnet"],
+    createdAt: 1782000000000
+  };
+  const previewPath = join(root, "preview.json");
+  const planPath = join(root, "runtime-plan.json");
+  const decision = join(root, "decision.md");
+  await writeFile(previewPath, JSON.stringify(createKswarmScriptPreview(workflowOptions), null, 2), "utf8");
+  await writeFile(planPath, JSON.stringify(createKswarmRuntimePlan(workflowOptions), null, 2), "utf8");
+  await writeFile(decision, "# Decision\n\nNo findings to approve.\n", "utf8");
+  return { previewPath, planPath, decision };
+}
+
 function reviewMarkdown(runnerId) {
   return `# Review
 

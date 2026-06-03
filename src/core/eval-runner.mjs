@@ -27,13 +27,19 @@ export function runDeterministicEvalCases(cases) {
   const results = cases.map((testCase) => {
     const policy = normalizePolicy(testCase.policy || {});
     const actual = reduceQualityGate(testCase.manifest, policy);
-    const passed =
-      actual.status === testCase.expected.status && actual.exitCode === testCase.expected.exitCode;
+    const expected = testCase.expected;
+
+    const statusMatch = actual.status === expected.status && actual.exitCode === expected.exitCode;
+    const reasonsText = Array.isArray(actual.reasons) ? actual.reasons.join("\n") : "";
+    const warningsText = Array.isArray(actual.warnings) ? actual.warnings.join("\n") : "";
+    const reasonsMatch = includesAll(reasonsText, expected.reasonsInclude);
+    const warningsMatch = includesAll(warningsText, expected.warningsInclude);
+    const passed = statusMatch && reasonsMatch && warningsMatch;
 
     return {
       name: testCase.name,
       passed,
-      expected: testCase.expected,
+      expected,
       actual
     };
   });
@@ -48,6 +54,13 @@ export function runDeterministicEvalCases(cases) {
     failed,
     cases: results
   };
+}
+
+function includesAll(haystack, needles) {
+  if (!Array.isArray(needles)) {
+    return true;
+  }
+  return needles.every((needle) => haystack.includes(needle));
 }
 
 export async function runDeterministicEval(corpusDir) {

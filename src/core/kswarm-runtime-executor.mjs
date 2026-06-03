@@ -1,4 +1,8 @@
-import { initializeArtifactRoot, loadManifestFromArtifactRoot } from "./artifact-root.mjs";
+import {
+  initializeArtifactRoot,
+  loadManifestFromArtifactRoot,
+  saveManifestToArtifactRoot
+} from "./artifact-root.mjs";
 import {
   recordCheckResult,
   recordDecisionMarkdown,
@@ -7,6 +11,7 @@ import {
   writeReviewMarkdownToArtifactRoot
 } from "./artifact-operations.mjs";
 import { reduceQualityGate } from "./gate-reducer.mjs";
+import { deriveRole, isReviewPolicyEnabled, validateReviewPolicyShape } from "./review-policy.mjs";
 import {
   KSWARM_RUNTIME_PLAN_KIND,
   createKswarmReviewerNodeInput,
@@ -26,6 +31,33 @@ export async function runKswarmRuntimePlan(options = {}) {
   const checkRunner = options.checkRunner || null;
   const verifierRunner = options.verifierRunner || null;
   const projectId = runtimePlan.projectId;
+
+  const reviewPolicy = isReviewPolicyEnabled(options.policy) ? options.policy.review : null;
+  let requiredSet = null;
+  let quorumSet = null;
+  if (reviewPolicy) {
+    const legacyMin =
+      options.policy && options.policy.minReviewers !== undefined ? options.policy.minReviewers : null;
+    const shapeErrors = validateReviewPolicyShape(reviewPolicy, legacyMin);
+    if (shapeErrors.length > 0) {
+      throw new Error(`invalid review policy: ${shapeErrors.join("; ")}`);
+    }
+    requiredSet = new Set(reviewPolicy.requiredReviewers);
+    const advisorySet = new Set(reviewPolicy.advisoryReviewers || []);
+    quorumSet = new Set(reviewPolicy.quorumMembers || reviewPolicy.requiredReviewers);
+    const knownSet = new Set([...requiredSet, ...advisorySet]);
+    const dispatchSet = new Set(runtimePlan.reviewers.map((reviewer) => reviewer.runnerId));
+    for (const runnerId of dispatchSet) {
+      if (!knownSet.has(runnerId)) {
+        throw new Error(`runtime plan dispatches unknown reviewer ${runnerId} (not in policy.review)`);
+      }
+    }
+    for (const runnerId of knownSet) {
+      if (!dispatchSet.has(runnerId)) {
+        throw new Error(`runtime plan does not dispatch expected reviewer ${runnerId}`);
+      }
+    }
+  }
 
   const proposal = await expectOk(
     "createScriptWorkflowProposal",
@@ -73,26 +105,68 @@ export async function runKswarmRuntimePlan(options = {}) {
   }
 
   const reviewerResults = [];
+  const reviewOutcomes = reviewPolicy ? [] : null;
   for (const reviewer of runtimePlan.reviewers) {
+    const role = requiredSet ? deriveRole(reviewer.runnerId, requiredSet) : "required";
+    const quorumMember = quorumSet ? quorumSet.has(reviewer.runnerId) : true;
+    const isRequired = role === "required";
     const nodeInput = createKswarmReviewerNodeInput({
       runId: runtimePlan.runId,
       artifactRoot: runtimePlan.artifactRoot,
       runnerId: reviewer.runnerId,
       target: runtimePlan.target,
       outputArtifact: reviewer.outputArtifact,
-      parallelGroupId
+      parallelGroupId,
+      reviewerRole: role,
+      quorumMember,
+      required: isRequired
     });
     const dispatched = await expectOk(
       "dispatchWorkflowScriptAgentNode",
       kswarmClient.dispatchWorkflowScriptAgentNode(projectId, workflowRunId, nodeInput)
     );
-    const reviewerOutput = await reviewerRunner({
-      reviewer,
-      nodeInput,
-      dispatch: dispatched,
-      runtimePlan,
-      preview
-    });
+
+    let reviewerOutput;
+    try {
+      reviewerOutput = await reviewerRunner({
+        reviewer,
+        nodeInput,
+        dispatch: dispatched,
+        runtimePlan,
+        preview,
+        role,
+        quorumMember
+      });
+    } catch (error) {
+      if (!reviewPolicy || isRequired) {
+        throw error;
+      }
+      reviewOutcomes.push({
+        runnerId: reviewer.runnerId,
+        role,
+        quorumMember,
+        nodeId: dispatched.nodeId,
+        status: "failed",
+        absenceReason: `reviewer runner failed: ${error.message}`
+      });
+      continue;
+    }
+
+    if (reviewPolicy && (reviewerOutput === null || reviewerOutput === undefined)) {
+      if (isRequired) {
+        throw new Error(`required reviewer ${reviewer.runnerId} produced no review artifact`);
+      }
+      reviewOutcomes.push({
+        runnerId: reviewer.runnerId,
+        role,
+        quorumMember,
+        nodeId: dispatched.nodeId,
+        status: "skipped",
+        absenceReason: "reviewer runner produced no review artifact"
+      });
+      continue;
+    }
+
     const markdown = normalizeMarkdownResult(reviewerOutput, "reviewerRunner");
     const artifact = await writeReviewMarkdownToArtifactRoot(runtimePlan.artifactRoot, markdown, {
       expectedRunnerId: reviewer.runnerId,
@@ -114,6 +188,20 @@ export async function runKswarmRuntimePlan(options = {}) {
       })
     );
     reviewerResults.push({ reviewer, artifact, dispatched, nodeResult });
+    if (reviewPolicy) {
+      reviewOutcomes.push({
+        runnerId: reviewer.runnerId,
+        role,
+        quorumMember,
+        nodeId: dispatched.nodeId,
+        status: "succeeded"
+      });
+    }
+  }
+
+  if (reviewPolicy) {
+    reviewOutcomes.sort((a, b) => a.runnerId.localeCompare(b.runnerId));
+    await persistReviewMetadata(runtimePlan.artifactRoot, reviewPolicy, reviewOutcomes);
   }
 
   const synthesis = await synthesizeArtifactRoot(runtimePlan.artifactRoot);
@@ -176,6 +264,7 @@ export async function runKswarmRuntimePlan(options = {}) {
     workflowRunId,
     parallelGroup: parallelGroupResult.parallelGroup,
     reviewerResults,
+    reviewOutcomes,
     synthesis,
     decision,
     checks,
@@ -231,12 +320,31 @@ async function expectOk(action, promise) {
   return result;
 }
 
+async function persistReviewMetadata(artifactRoot, reviewPolicy, reviewOutcomes) {
+  const { manifest } = await loadManifestFromArtifactRoot(artifactRoot);
+  const reviewPolicyEcho = {
+    mode: reviewPolicy.mode,
+    requiredReviewers: [...(reviewPolicy.requiredReviewers || [])],
+    quorumMembers: [...(reviewPolicy.quorumMembers || reviewPolicy.requiredReviewers || [])],
+    advisoryReviewers: [...(reviewPolicy.advisoryReviewers || [])]
+  };
+  if (reviewPolicy.quorumMin !== undefined) {
+    reviewPolicyEcho.quorumMin = reviewPolicy.quorumMin;
+  }
+  await saveManifestToArtifactRoot(artifactRoot, {
+    ...manifest,
+    reviewPolicy: reviewPolicyEcho,
+    reviewOutcomes
+  });
+}
+
 function createContextOptions(runtimePlan) {
   if (
     !runtimePlan.projectRoot &&
     (!Array.isArray(runtimePlan.docsRoots) || runtimePlan.docsRoots.length === 0) &&
     !runtimePlan.qualityPrinciplesPath &&
-    !runtimePlan.changeGoal
+    !runtimePlan.changeGoal &&
+    !runtimePlan.changeset
   ) {
     return null;
   }
@@ -245,7 +353,8 @@ function createContextOptions(runtimePlan) {
     projectRoot: runtimePlan.projectRoot,
     docsRoots: runtimePlan.docsRoots || [],
     qualityPrinciplesPath: runtimePlan.qualityPrinciplesPath,
-    changeGoal: runtimePlan.changeGoal
+    changeGoal: runtimePlan.changeGoal,
+    ...(runtimePlan.changeset ? { changeset: runtimePlan.changeset } : {})
   };
 }
 

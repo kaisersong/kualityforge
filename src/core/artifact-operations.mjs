@@ -3,6 +3,14 @@ import { basename, dirname, join } from "node:path";
 import { loadManifestFromArtifactRoot, saveManifestToArtifactRoot } from "./artifact-root.mjs";
 import { parseReviewArtifact, safeArtifactName } from "./review-artifact.mjs";
 import { renderSummaryMarkdown, synthesizeFindings } from "./synthesis.mjs";
+import { scoreReviewers } from "./reviewer-scoring.mjs";
+import { inducePrinciples, renderInducedPrinciplesMarkdown } from "./principle-induction.mjs";
+import {
+  buildReportModel,
+  renderReportHtml,
+  renderReportMarkdown,
+  resolveReportOutDir
+} from "./report.mjs";
 
 export async function writeReviewMarkdownToArtifactRoot(artifactRoot, markdown, options = {}) {
   const review = parseReviewArtifact(markdown);
@@ -59,18 +67,134 @@ export async function synthesizeArtifactRoot(artifactRoot) {
   const contextGaps = manifest.reviewers
     .filter((reviewer) => Array.isArray(reviewer.contextGaps) && reviewer.contextGaps.length > 0)
     .map((reviewer) => ({ runnerId: reviewer.runnerId, gaps: reviewer.contextGaps }));
-  const summary = renderSummaryMarkdown({ runId: manifest.runId, findings, contextGaps });
+
+  const reviewOutcomes = Array.isArray(manifest.reviewOutcomes) ? manifest.reviewOutcomes : [];
+  const reviewerScores = scoreReviewers({
+    reviewers: manifest.reviewers,
+    findings: manifest.findings,
+    synthesizedFindings: findings,
+    reviewOutcomes
+  });
+  const scoresWithTimestamp = { ...reviewerScores, generatedAt: new Date().toISOString() };
+
+  const existingPrinciples = await loadExistingPrinciples(artifactRoot);
+  const induced = inducePrinciples({
+    synthesizedFindings: findings,
+    reviewers: manifest.reviewers,
+    existingPrinciples
+  });
+  const inducedWithTimestamp = { ...induced, generatedAt: new Date().toISOString() };
+
+  const summary = renderSummaryMarkdown({
+    runId: manifest.runId,
+    findings,
+    contextGaps,
+    reviewPolicy: manifest.reviewPolicy || null,
+    reviewOutcomes,
+    reviewerScores,
+    inducedPrinciples: induced
+  });
+
   const artifact = "summary.md";
+  const scoresArtifact = "scores.json";
+  const inducedPrinciplesArtifact = "induced-principles.json";
+  const inducedPrinciplesMarkdownArtifact = "induced-principles.md";
+
   await writeFile(join(artifactRoot, artifact), summary, "utf8");
+  await writeFile(
+    join(artifactRoot, scoresArtifact),
+    `${JSON.stringify(scoresWithTimestamp, null, 2)}\n`,
+    "utf8"
+  );
+  await writeFile(
+    join(artifactRoot, inducedPrinciplesArtifact),
+    `${JSON.stringify(inducedWithTimestamp, null, 2)}\n`,
+    "utf8"
+  );
+  await writeFile(
+    join(artifactRoot, inducedPrinciplesMarkdownArtifact),
+    renderInducedPrinciplesMarkdown(induced),
+    "utf8"
+  );
+
   await saveManifestToArtifactRoot(artifactRoot, {
     ...manifest,
     findings,
     synthesis: {
       artifact,
       status: "completed"
+    },
+    reviewerScores: {
+      artifact: scoresArtifact,
+      status: "completed"
+    },
+    inducedPrinciples: {
+      artifact: inducedPrinciplesArtifact,
+      status: "completed"
     }
   });
-  return { artifact, findingCount: findings.length };
+  return { artifact, findingCount: findings.length, scoresArtifact, inducedPrinciplesArtifact };
+}
+
+async function loadExistingPrinciples(artifactRoot) {
+  try {
+    const content = await readFile(join(artifactRoot, "context", "quality-principles.json"), "utf8");
+    const parsed = JSON.parse(content);
+    return Array.isArray(parsed.principles) ? parsed.principles : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function writeReportFromArtifactRoot(artifactRoot, options = {}) {
+  const { manifest } = await loadManifestFromArtifactRoot(artifactRoot);
+  const summaryMarkdown = await readArtifactText(join(artifactRoot, "summary.md"));
+  const scores = await readArtifactJson(join(artifactRoot, "scores.json"));
+  const inducedPrinciples = await readArtifactJson(join(artifactRoot, "induced-principles.json"));
+  const changeset = await readArtifactJson(join(artifactRoot, "context", "changeset.json"));
+
+  const model = buildReportModel({
+    manifest,
+    summaryMarkdown: summaryMarkdown || "",
+    scores,
+    inducedPrinciples,
+    changeset,
+    gate: options.gate || null
+  });
+
+  const outDir = resolveReportOutDir(options.outDir);
+  await mkdir(outDir, { recursive: true });
+  const baseName = `${safeArtifactName(manifest.runId || "run")}-report`;
+  const markdownPath = join(outDir, `${baseName}.md`);
+  await writeFile(markdownPath, renderReportMarkdown(model), "utf8");
+
+  const result = { markdownPath };
+  if (options.html) {
+    const htmlPath = join(outDir, `${baseName}.html`);
+    await writeFile(htmlPath, renderReportHtml(model), "utf8");
+    result.htmlPath = htmlPath;
+  }
+  return result;
+}
+
+async function readArtifactText(path) {
+  try {
+    return await readFile(path, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+async function readArtifactJson(path) {
+  const text = await readArtifactText(path);
+  if (!text) {
+    return null;
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
 }
 
 export async function recordDecisionMarkdown(artifactRoot, markdown, options = {}) {

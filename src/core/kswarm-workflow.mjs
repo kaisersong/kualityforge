@@ -172,6 +172,7 @@ export function createKswarmRuntimePlan(options = {}) {
     docsRoots: [...normalized.docsRoots],
     qualityPrinciplesPath: normalized.qualityPrinciplesPath,
     changeGoal: normalized.changeGoal,
+    changeset: normalized.changeset,
     reviewers,
     contextRequired: [...DEFAULT_CONTEXT_REQUIRED],
     operations
@@ -180,6 +181,9 @@ export function createKswarmRuntimePlan(options = {}) {
 
 export function createKswarmReviewerNodeInput(options = {}) {
   const normalized = normalizeReviewerNodeOptions(options);
+  const reviewerRole = options.reviewerRole === "advisory" ? "advisory" : "required";
+  const quorumMember = options.quorumMember === undefined ? true : Boolean(options.quorumMember);
+  const required = options.required === undefined ? reviewerRole === "required" : Boolean(options.required);
   const prompt = [
     "You are a KualityForge reviewer running inside a KSwarm dynamic workflow.",
     "",
@@ -188,10 +192,14 @@ export function createKswarmReviewerNodeInput(options = {}) {
     "",
     "Required context before judging the change:",
     `- Read ${normalized.artifactRoot}/context/project-brief.md.`,
+    `- Evaluate ONLY the frozen changeset. Read ${normalized.artifactRoot}/context/changeset.md (human-readable) and ${normalized.artifactRoot}/context/changeset.json (machine-readable).`,
+    "- Do NOT run your own git diff or infer the changeset from the working tree; the changeset is frozen once so all reviewers judge the identical file set.",
+    "- If context/changeset.json reports patchTruncated:true, treat unlisted hunks as out of scope and record a contextGap.",
     `- Read ${normalized.artifactRoot}/context/user-quality-principles.json when it exists.`,
     "- Use project instructions and docs listed in the project brief as higher-priority context than generic assumptions.",
     "",
-    "Write your final review as a Markdown artifact. It must include exactly one fenced JSON block:",
+    "Your entire final message MUST BE the review, written as Markdown. Do not summarize or describe it; emit the Markdown itself.",
+    "The Markdown MUST contain exactly one fenced JSON block, written verbatim with this fence and shape (fill in real findings):",
     "",
     "```kualityforge-review",
     JSON.stringify(
@@ -223,11 +231,13 @@ export function createKswarmReviewerNodeInput(options = {}) {
     parallelGroupId: normalized.parallelGroupId,
     fanoutItemKey: `reviewer-${safeArtifactName(normalized.runnerId)}`,
     fanoutItemLabel: normalized.runnerId,
-    required: true,
+    required,
     evidenceRequired: true,
     prompt,
     options: {
       role: "reviewer",
+      reviewerRole,
+      quorumMember,
       runnerId: normalized.runnerId,
       artifactRoot: normalized.artifactRoot,
       outputArtifact: normalized.outputArtifact,
@@ -273,6 +283,7 @@ function normalizeWorkflowOptions(options) {
     docsRoots: Array.isArray(options.docsRoots) ? options.docsRoots.filter(Boolean) : [],
     qualityPrinciplesPath: options.qualityPrinciplesPath || null,
     changeGoal: options.changeGoal || null,
+    changeset: normalizeChangesetOptions(options.changeset),
     requestedBy: options.requestedBy || null,
     createdAt: Number.isFinite(Number(options.createdAt)) ? Number(options.createdAt) : Date.now()
   };
@@ -288,6 +299,24 @@ function normalizeReviewerNodeOptions(options) {
     outputArtifact: options.outputArtifact || `reviews/${safeArtifactName(runnerId)}.md`,
     parallelGroupId: requireString(options.parallelGroupId, "parallelGroupId")
   };
+}
+
+function normalizeChangesetOptions(changeset) {
+  if (!changeset || typeof changeset !== "object") {
+    return null;
+  }
+  const normalized = {};
+  if (typeof changeset.base === "string" && changeset.base.trim()) {
+    normalized.base = changeset.base.trim();
+  }
+  if (typeof changeset.head === "string" && changeset.head.trim()) {
+    normalized.head = changeset.head.trim();
+  }
+  const maxPatchBytes = Number(changeset.maxPatchBytes);
+  if (Number.isFinite(maxPatchBytes) && maxPatchBytes > 0) {
+    normalized.maxPatchBytes = maxPatchBytes;
+  }
+  return Object.keys(normalized).length > 0 ? normalized : null;
 }
 
 function normalizeReviewers(reviewers) {
@@ -330,6 +359,15 @@ function createContextCliArgs(options) {
   }
   if (options.changeGoal) {
     args.push("--change-goal", options.changeGoal);
+  }
+  if (options.changeset?.base) {
+    args.push("--diff-base", options.changeset.base);
+  }
+  if (options.changeset?.head) {
+    args.push("--diff-head", options.changeset.head);
+  }
+  if (options.changeset?.maxPatchBytes) {
+    args.push("--diff-max-patch-bytes", String(options.changeset.maxPatchBytes));
   }
   return args;
 }

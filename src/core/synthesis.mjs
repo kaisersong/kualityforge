@@ -1,8 +1,11 @@
+import { renderScoresMarkdown } from "./reviewer-scoring.mjs";
+
 const SEVERITY_RANK = new Map([
   ["blocker", 3],
   ["warning", 2],
   ["info", 1]
 ]);
+
 
 export function synthesizeFindings(findings) {
   const groups = new Map();
@@ -38,7 +41,7 @@ export function synthesizeFindings(findings) {
   });
 }
 
-export function renderSummaryMarkdown({ runId, findings, contextGaps = [] }) {
+export function renderSummaryMarkdown({ runId, findings, contextGaps = [], reviewPolicy = null, reviewOutcomes = [], reviewerScores = null, inducedPrinciples = null }) {
   const lines = [`# KualityForge Summary: ${runId}`, ""];
 
   if (contextGaps.length > 0) {
@@ -47,6 +50,52 @@ export function renderSummaryMarkdown({ runId, findings, contextGaps = [] }) {
       for (const gap of item.gaps || []) {
         lines.push(`- ${item.runnerId}: ${gap}`);
       }
+    }
+    lines.push("");
+  }
+
+  if (reviewPolicy && typeof reviewPolicy === "object") {
+    const outcomes = Array.isArray(reviewOutcomes) ? reviewOutcomes : [];
+    const outcomeByRunner = new Map(outcomes.map((outcome) => [outcome.runnerId, outcome]));
+    const succeeded = (runnerId) => outcomeByRunner.get(runnerId)?.status === "succeeded";
+    const required = [...(reviewPolicy.requiredReviewers || [])].sort();
+    const advisory = [...(reviewPolicy.advisoryReviewers || [])].sort();
+
+    lines.push("## Quorum Review", "");
+    lines.push(`- Mode: ${reviewPolicy.mode || "unknown"}`);
+    if (reviewPolicy.quorumMin !== undefined && reviewPolicy.quorumMin !== null) {
+      lines.push(`- Quorum minimum: ${reviewPolicy.quorumMin}`);
+    }
+
+    lines.push("- Required reviewers:");
+    if (required.length === 0) {
+      lines.push("  - (none)");
+    } else {
+      for (const runnerId of required) {
+        lines.push(`  - ${runnerId}: ${succeeded(runnerId) ? "present" : "absent"}`);
+      }
+    }
+
+    lines.push("- Advisory reviewers:");
+    if (advisory.length === 0) {
+      lines.push("  - (none)");
+    } else {
+      for (const runnerId of advisory) {
+        if (succeeded(runnerId)) {
+          lines.push(`  - ${runnerId}: present`);
+        } else {
+          const reason = outcomeByRunner.get(runnerId)?.absenceReason || "absent";
+          lines.push(`  - ${runnerId}: absent (${reason})`);
+        }
+      }
+    }
+    lines.push("");
+  }
+
+  const scoresMarkdown = reviewerScores ? renderScoresMarkdown(reviewerScores) : "";
+  if (scoresMarkdown) {
+    for (const line of scoresMarkdown.replace(/\n+$/, "").split("\n")) {
+      lines.push(line);
     }
     lines.push("");
   }
@@ -80,6 +129,14 @@ export function renderSummaryMarkdown({ runId, findings, contextGaps = [] }) {
     lines.push(`  - Reviewer count: ${finding.reviewerCount || 0}`);
   }
   lines.push("");
+
+  if (inducedPrinciples?.candidates?.length) {
+    lines.push("## Induced Principle Candidates (advisory)", "");
+    for (const candidate of inducedPrinciples.candidates) {
+      lines.push(`- ${candidate.id} (${candidate.priority}): ${candidate.statement}`);
+    }
+    lines.push("");
+  }
 
   return `${lines.join("\n")}\n`;
 }

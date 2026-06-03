@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
+import { buildChangesetJson, computeChangeset, renderChangesetMarkdown } from "./changeset.mjs";
 
 export async function buildContextPack(artifactRoot, options = {}) {
   if (!artifactRoot || typeof artifactRoot !== "string") {
@@ -74,6 +75,24 @@ export async function buildContextPack(artifactRoot, options = {}) {
     files
   );
 
+  let changeset = null;
+  if (projectRootRealpath) {
+    const changesetOptions = options.changeset || {};
+    changeset = await computeChangeset({
+      projectRoot: projectRootRealpath,
+      base: changesetOptions.base,
+      head: changesetOptions.head,
+      maxPatchBytes: changesetOptions.maxPatchBytes
+    });
+    await writeContextFile(
+      contextRoot,
+      "changeset.json",
+      `${JSON.stringify(buildChangesetJson(changeset), null, 2)}\n`,
+      files
+    );
+    await writeContextFile(contextRoot, "changeset.md", renderChangesetMarkdown(changeset), files);
+  }
+
   const docsIndex = {
     schemaVersion: 1,
     docsRoots,
@@ -89,7 +108,7 @@ export async function buildContextPack(artifactRoot, options = {}) {
   await writeContextFile(
     contextRoot,
     "project-brief.md",
-    renderProjectBrief({ projectContext, qualityPrinciples }),
+    renderProjectBrief({ projectContext, qualityPrinciples, changeset }),
     files
   );
 
@@ -131,11 +150,18 @@ export async function buildContextPack(artifactRoot, options = {}) {
       docsIndex: {
         artifact: "context/docs-index.json",
         sha256: files["docs-index.json"].sha256
-      }
+      },
+      changeset: files["changeset.json"]
+        ? {
+            artifact: "context/changeset.json",
+            sha256: files["changeset.json"].sha256
+          }
+        : null
     },
     contextManifest,
     projectContext,
-    qualityPrinciples
+    qualityPrinciples,
+    changeset
   };
 }
 
@@ -208,7 +234,7 @@ function renderQualityPrinciplesMarkdown(qualityPrinciples) {
   return `${lines.join("\n")}\n`;
 }
 
-function renderProjectBrief({ projectContext, qualityPrinciples }) {
+function renderProjectBrief({ projectContext, qualityPrinciples, changeset = null }) {
   const lines = ["# KualityForge Project Brief", ""];
   lines.push("## Change Goal", "");
   lines.push(projectContext.changeGoal || "No change goal was provided.");
@@ -237,6 +263,29 @@ function renderProjectBrief({ projectContext, qualityPrinciples }) {
   } else {
     for (const docsRoot of projectContext.docsRoots) {
       lines.push(`- ${docsRoot.path} (${docsRoot.realpath})`);
+    }
+  }
+  lines.push("");
+  lines.push("## Changeset", "");
+  if (!changeset || !changeset.available) {
+    lines.push(
+      changeset?.reason
+        ? `No changeset was frozen (${changeset.reason}).`
+        : "No changeset was frozen."
+    );
+  } else {
+    const shortBase = String(changeset.baseSha || "").slice(0, 12) || "unknown";
+    const shortHead = String(changeset.headSha || "").slice(0, 12) || "unknown";
+    lines.push(`- Base: ${changeset.base} (${shortBase})`);
+    lines.push(`- Head: ${changeset.head} (${shortHead})`);
+    lines.push(`- Files changed: ${changeset.fileCount}`);
+    lines.push("- Evaluate ONLY these files (see context/changeset.md for the full diff):");
+    if (changeset.files.length === 0) {
+      lines.push("  - (no files changed)");
+    } else {
+      for (const file of changeset.files) {
+        lines.push(`  - ${file.status} ${file.path}`);
+      }
     }
   }
   lines.push("");

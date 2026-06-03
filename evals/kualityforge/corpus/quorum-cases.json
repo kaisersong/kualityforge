@@ -1,0 +1,250 @@
+[
+  {
+    "name": "quorum satisfied with required present passes",
+    "policy": {
+      "review": {
+        "mode": "quorum",
+        "requiredReviewers": ["req:1"],
+        "quorumMembers": ["req:1", "adv:2", "adv:3"],
+        "advisoryReviewers": ["adv:2", "adv:3"],
+        "quorumMin": 2
+      }
+    },
+    "manifest": {
+      "runId": "eval-quorum-pass",
+      "status": "verified",
+      "reviewPolicy": {
+        "mode": "quorum",
+        "requiredReviewers": ["req:1"],
+        "quorumMembers": ["req:1", "adv:2", "adv:3"],
+        "advisoryReviewers": ["adv:2", "adv:3"],
+        "quorumMin": 2
+      },
+      "reviewers": [
+        { "runnerId": "req:1", "status": "completed", "artifact": "reviews/req1.md" },
+        { "runnerId": "adv:2", "status": "completed", "artifact": "reviews/adv2.md" }
+      ],
+      "reviewOutcomes": [
+        { "runnerId": "req:1", "status": "succeeded" },
+        { "runnerId": "adv:2", "status": "succeeded" },
+        { "runnerId": "adv:3", "status": "skipped", "absenceReason": "dispatch declined" }
+      ],
+      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "fixer": { "runnerId": "codex:fixer" },
+      "verification": { "runnerId": "claude:verifier", "status": "verified", "artifact": "verify.md" },
+      "findings": [],
+      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+    },
+    "expected": {
+      "status": "passed",
+      "exitCode": 0,
+      "warningsInclude": ["adv:3"]
+    }
+  },
+  {
+    "name": "required reviewer absent fails closed even when quorum count met by advisory",
+    "policy": {
+      "review": {
+        "mode": "quorum",
+        "requiredReviewers": ["req:1"],
+        "quorumMembers": ["req:1", "adv:2", "adv:3"],
+        "advisoryReviewers": ["adv:2", "adv:3"],
+        "quorumMin": 2
+      }
+    },
+    "manifest": {
+      "runId": "eval-quorum-required-missing",
+      "status": "verified",
+      "reviewPolicy": {
+        "mode": "quorum",
+        "requiredReviewers": ["req:1"],
+        "quorumMembers": ["req:1", "adv:2", "adv:3"],
+        "advisoryReviewers": ["adv:2", "adv:3"],
+        "quorumMin": 2
+      },
+      "reviewers": [
+        { "runnerId": "adv:2", "status": "completed", "artifact": "reviews/adv2.md" },
+        { "runnerId": "adv:3", "status": "completed", "artifact": "reviews/adv3.md" }
+      ],
+      "reviewOutcomes": [
+        { "runnerId": "req:1", "status": "skipped", "absenceReason": "no dispatch" },
+        { "runnerId": "adv:2", "status": "succeeded" },
+        { "runnerId": "adv:3", "status": "succeeded" }
+      ],
+      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "fixer": { "runnerId": "codex:fixer" },
+      "verification": { "runnerId": "claude:verifier", "status": "verified", "artifact": "verify.md" },
+      "findings": [],
+      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+    },
+    "expected": {
+      "status": "incomplete",
+      "exitCode": 2,
+      "reasonsInclude": ["required reviewer missing: req:1"]
+    }
+  },
+  {
+    "name": "quorum shortage fails closed",
+    "policy": {
+      "review": {
+        "mode": "quorum",
+        "requiredReviewers": ["req:1"],
+        "quorumMembers": ["req:1", "adv:2", "adv:3"],
+        "advisoryReviewers": ["adv:2", "adv:3"],
+        "quorumMin": 2
+      }
+    },
+    "manifest": {
+      "runId": "eval-quorum-shortage",
+      "status": "verified",
+      "reviewPolicy": {
+        "mode": "quorum",
+        "requiredReviewers": ["req:1"],
+        "quorumMembers": ["req:1", "adv:2", "adv:3"],
+        "advisoryReviewers": ["adv:2", "adv:3"],
+        "quorumMin": 2
+      },
+      "reviewers": [
+        { "runnerId": "req:1", "status": "completed", "artifact": "reviews/req1.md" }
+      ],
+      "reviewOutcomes": [
+        { "runnerId": "req:1", "status": "succeeded" },
+        { "runnerId": "adv:2", "status": "skipped", "absenceReason": "x" },
+        { "runnerId": "adv:3", "status": "skipped", "absenceReason": "y" }
+      ],
+      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "fixer": { "runnerId": "codex:fixer" },
+      "verification": { "runnerId": "claude:verifier", "status": "verified", "artifact": "verify.md" },
+      "findings": [],
+      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+    },
+    "expected": {
+      "status": "incomplete",
+      "exitCode": 2,
+      "reasonsInclude": ["quorum shortage"]
+    }
+  },
+  {
+    "name": "advisory open finding is non-blocking warning",
+    "policy": {
+      "review": {
+        "mode": "quorum",
+        "requiredReviewers": ["req:1"],
+        "quorumMembers": ["req:1", "adv:2", "adv:3"],
+        "advisoryReviewers": ["adv:2", "adv:3"],
+        "quorumMin": 2
+      }
+    },
+    "manifest": {
+      "runId": "eval-quorum-advisory-finding",
+      "status": "verified",
+      "reviewPolicy": {
+        "mode": "quorum",
+        "requiredReviewers": ["req:1"],
+        "quorumMembers": ["req:1", "adv:2", "adv:3"],
+        "advisoryReviewers": ["adv:2", "adv:3"],
+        "quorumMin": 2
+      },
+      "reviewers": [
+        { "runnerId": "req:1", "status": "completed", "artifact": "reviews/req1.md" },
+        { "runnerId": "adv:2", "status": "completed", "artifact": "reviews/adv2.md" }
+      ],
+      "reviewOutcomes": [
+        { "runnerId": "req:1", "status": "succeeded" },
+        { "runnerId": "adv:2", "status": "succeeded" },
+        { "runnerId": "adv:3", "status": "skipped", "absenceReason": "x" }
+      ],
+      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "fixer": { "runnerId": "codex:fixer" },
+      "verification": { "runnerId": "claude:verifier", "status": "verified", "artifact": "verify.md" },
+      "findings": [{ "id": "F-1", "status": "open", "sourceRunnerId": "adv:2" }],
+      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+    },
+    "expected": {
+      "status": "passed",
+      "exitCode": 0,
+      "warningsInclude": ["F-1"]
+    }
+  },
+  {
+    "name": "reviewOutcomes role spoof is invalid artifact",
+    "policy": {
+      "review": {
+        "mode": "quorum",
+        "requiredReviewers": ["req:1"],
+        "quorumMembers": ["req:1", "adv:2", "adv:3"],
+        "advisoryReviewers": ["adv:2", "adv:3"],
+        "quorumMin": 2
+      }
+    },
+    "manifest": {
+      "runId": "eval-quorum-role-spoof",
+      "status": "verified",
+      "reviewPolicy": {
+        "mode": "quorum",
+        "requiredReviewers": ["req:1"],
+        "quorumMembers": ["req:1", "adv:2", "adv:3"],
+        "advisoryReviewers": ["adv:2", "adv:3"],
+        "quorumMin": 2
+      },
+      "reviewers": [
+        { "runnerId": "req:1", "status": "completed", "artifact": "reviews/req1.md", "role": "advisory" },
+        { "runnerId": "adv:2", "status": "completed", "artifact": "reviews/adv2.md" }
+      ],
+      "reviewOutcomes": [
+        { "runnerId": "req:1", "status": "succeeded" },
+        { "runnerId": "adv:2", "status": "succeeded" },
+        { "runnerId": "adv:3", "status": "skipped", "absenceReason": "x" }
+      ],
+      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "fixer": { "runnerId": "codex:fixer" },
+      "verification": { "runnerId": "claude:verifier", "status": "verified", "artifact": "verify.md" },
+      "findings": [],
+      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+    },
+    "expected": {
+      "status": "invalid_artifact",
+      "exitCode": 1
+    }
+  },
+  {
+    "name": "missing reviewOutcome for expected reviewer is invalid artifact",
+    "policy": {
+      "review": {
+        "mode": "quorum",
+        "requiredReviewers": ["req:1"],
+        "quorumMembers": ["req:1", "adv:2", "adv:3"],
+        "advisoryReviewers": ["adv:2", "adv:3"],
+        "quorumMin": 2
+      }
+    },
+    "manifest": {
+      "runId": "eval-quorum-missing-outcome",
+      "status": "verified",
+      "reviewPolicy": {
+        "mode": "quorum",
+        "requiredReviewers": ["req:1"],
+        "quorumMembers": ["req:1", "adv:2", "adv:3"],
+        "advisoryReviewers": ["adv:2", "adv:3"],
+        "quorumMin": 2
+      },
+      "reviewers": [
+        { "runnerId": "req:1", "status": "completed", "artifact": "reviews/req1.md" },
+        { "runnerId": "adv:2", "status": "completed", "artifact": "reviews/adv2.md" }
+      ],
+      "reviewOutcomes": [
+        { "runnerId": "req:1", "status": "succeeded" },
+        { "runnerId": "adv:2", "status": "succeeded" }
+      ],
+      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "fixer": { "runnerId": "codex:fixer" },
+      "verification": { "runnerId": "claude:verifier", "status": "verified", "artifact": "verify.md" },
+      "findings": [],
+      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+    },
+    "expected": {
+      "status": "invalid_artifact",
+      "exitCode": 1
+    }
+  }
+]

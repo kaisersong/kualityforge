@@ -36,6 +36,8 @@
           "runnerId": { "type": "string" },
           "status": { "type": "string" },
           "artifact": { "type": "string" },
+          "role": { "type": "string", "enum": ["required", "advisory"] },
+          "quorumMember": { "type": "boolean" },
           "contextRead": {
             "type": "object",
             "additionalProperties": { "type": "boolean" }
@@ -112,6 +114,7 @@
           "type": { "type": "string" },
           "principleId": { "type": ["string", "null"] },
           "priority": { "type": ["string", "null"] },
+          "role": { "type": "string", "enum": ["required", "advisory"] },
           "title": { "type": "string" },
           "status": { "type": "string" },
           "severity": { "type": "string" },
@@ -135,6 +138,37 @@
           "status": { "type": "string" },
           "command": { "type": "string" },
           "log": { "type": "string" }
+        }
+      }
+    },
+    "reviewPolicy": {
+      "type": "object",
+      "properties": {
+        "mode": { "type": "string", "enum": ["required_all", "quorum"] },
+        "requiredReviewers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "advisoryReviewers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "quorumMembers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "quorumMin": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "reviewOutcomes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["runnerId", "status"],
+        "properties": {
+          "runnerId": { "type": "string" },
+          "status": { "type": "string", "enum": ["succeeded", "failed", "skipped"] },
+          "absenceReason": { "type": "string" }
         }
       }
     }

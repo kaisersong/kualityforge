@@ -1,9 +1,20 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 import { buildContextPack } from "../../../src/core/context-pack.mjs";
+
+const execFileAsync = promisify(execFile);
+
+async function initGitRepo(dir) {
+  await execFileAsync("git", ["init", "-q"], { cwd: dir });
+  await execFileAsync("git", ["config", "user.email", "test@example.com"], { cwd: dir });
+  await execFileAsync("git", ["config", "user.name", "Test"], { cwd: dir });
+  await execFileAsync("git", ["config", "commit.gpgsign", "false"], { cwd: dir });
+}
 
 test("buildContextPack freezes quality principles and project context artifacts", async () => {
   const root = await mkdtemp(join(tmpdir(), "kualityforge-context-"));
@@ -87,6 +98,75 @@ test("buildContextPack rejects instruction path traversal", async () => {
         }),
       /instruction file path must stay within project root/
     );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("buildContextPack freezes the git changeset for all reviewers", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kualityforge-context-changeset-"));
+  const projectRoot = join(root, "project");
+  const artifactRoot = join(root, "artifacts");
+  try {
+    await mkdir(projectRoot, { recursive: true });
+    await mkdir(artifactRoot, { recursive: true });
+    await initGitRepo(projectRoot);
+    await writeFile(join(projectRoot, "keep.txt"), "line1\nline2\n", "utf8");
+    await execFileAsync("git", ["add", "keep.txt"], { cwd: projectRoot });
+    await execFileAsync("git", ["commit", "-q", "-m", "base"], { cwd: projectRoot });
+    await writeFile(join(projectRoot, "keep.txt"), "line1\nchanged\n", "utf8");
+
+    const context = await buildContextPack(artifactRoot, {
+      projectRoot,
+      changeGoal: "Freeze the changeset."
+    });
+
+    const changesetJson = JSON.parse(
+      await readFile(join(artifactRoot, "context", "changeset.json"), "utf8")
+    );
+    assert.equal(changesetJson.available, true);
+    assert.ok(changesetJson.files.some((file) => file.path === "keep.txt"));
+
+    const changesetMd = await readFile(join(artifactRoot, "context", "changeset.md"), "utf8");
+    assert.match(changesetMd, /Frozen Changeset/);
+
+    const projectBrief = await readFile(join(artifactRoot, "context", "project-brief.md"), "utf8");
+    assert.match(projectBrief, /## Changeset/);
+    assert.match(projectBrief, /keep\.txt/);
+
+    assert.match(context.changeset.available ? "available" : "x", /available/);
+    assert.match(
+      context.contextManifest.files["changeset.json"].sha256,
+      /^[a-f0-9]{64}$/
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("buildContextPack degrades gracefully when project is not a git repo", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kualityforge-context-nogit-"));
+  const projectRoot = join(root, "project");
+  const artifactRoot = join(root, "artifacts");
+  try {
+    await mkdir(projectRoot, { recursive: true });
+    await mkdir(artifactRoot, { recursive: true });
+    await writeFile(join(projectRoot, "file.txt"), "content\n", "utf8");
+
+    const context = await buildContextPack(artifactRoot, {
+      projectRoot,
+      changeGoal: "No git here."
+    });
+
+    const changesetJson = JSON.parse(
+      await readFile(join(artifactRoot, "context", "changeset.json"), "utf8")
+    );
+    assert.equal(changesetJson.available, false);
+    assert.ok(typeof changesetJson.reason === "string" && changesetJson.reason.length > 0);
+
+    const projectBrief = await readFile(join(artifactRoot, "context", "project-brief.md"), "utf8");
+    assert.match(projectBrief, /No changeset was frozen/);
+    assert.equal(context.changeset.available, false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

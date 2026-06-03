@@ -1,3 +1,5 @@
+import { evaluateReviewPolicy, isReviewPolicyEnabled } from "./review-policy.mjs";
+
 export const DEFAULT_RELEASE_POLICY = Object.freeze({
   minReviewers: 2,
   requireHumanDecision: true,
@@ -71,6 +73,14 @@ export function validateArtifactReferences(manifest) {
     errors.push("synthesis.artifact must stay within artifact root");
   }
 
+  if (manifest.reviewerScores?.artifact && !isSafeArtifactPath(manifest.reviewerScores.artifact)) {
+    errors.push("reviewerScores.artifact must stay within artifact root");
+  }
+
+  if (manifest.inducedPrinciples?.artifact && !isSafeArtifactPath(manifest.inducedPrinciples.artifact)) {
+    errors.push("inducedPrinciples.artifact must stay within artifact root");
+  }
+
   if (manifest.fixer?.artifact && !isSafeArtifactPath(manifest.fixer.artifact)) {
     errors.push("fixer.artifact must stay within artifact root");
   }
@@ -96,7 +106,8 @@ function validateContextArtifacts(manifest) {
     "qualityPrinciples",
     "projectContext",
     "projectBrief",
-    "docsIndex"
+    "docsIndex",
+    "changeset"
   ]) {
     const item = context[key];
     if (!item) {
@@ -135,32 +146,63 @@ export function reduceQualityGate(manifest, policy = DEFAULT_RELEASE_POLICY) {
   }
 
   const blockers = [];
-  const reviewerCount = manifest.reviewers.length;
+  const warnings = [];
 
-  if (reviewerCount < effectivePolicy.minReviewers) {
-    blockers.push(
-      `reviewer shortage: expected at least ${effectivePolicy.minReviewers}, got ${reviewerCount}`
-    );
+  if (isReviewPolicyEnabled(effectivePolicy)) {
+    const reviewResult = evaluateReviewPolicy(manifest, effectivePolicy);
+    if (reviewResult.invalid) {
+      return failure("invalid_artifact", reviewResult.invalid);
+    }
+    blockers.push(...reviewResult.blockers);
+    warnings.push(...reviewResult.warnings);
+  } else {
+    const reviewerCount = manifest.reviewers.length;
+    if (reviewerCount < effectivePolicy.minReviewers) {
+      blockers.push(
+        `reviewer shortage: expected at least ${effectivePolicy.minReviewers}, got ${reviewerCount}`
+      );
+    }
   }
 
   if (effectivePolicy.requireHumanDecision && !manifest.humanDecision) {
     blockers.push("human decision artifact is required");
   }
 
+  const reviewEnabled = isReviewPolicyEnabled(effectivePolicy);
+  const requiredReviewerSet = reviewEnabled
+    ? new Set(effectivePolicy.review.requiredReviewers || [])
+    : null;
+  const isAdvisoryFinding = (finding) => {
+    if (!reviewEnabled) {
+      return false;
+    }
+    const sources = findingSources(finding);
+    if (sources.length === 0) {
+      return false;
+    }
+    return sources.every((runnerId) => !requiredReviewerSet.has(runnerId));
+  };
+
   const openFindings = manifest.findings.filter((finding) => {
     return ["open", "approved_for_fix", "fixed", "verification_failed"].includes(
       finding.status
     );
   });
-  if (openFindings.length > 0) {
-    blockers.push(`unresolved findings: ${openFindings.map((f) => f.id).join(", ")}`);
+  const blockingOpenFindings = openFindings.filter((finding) => !isAdvisoryFinding(finding));
+  const advisoryOpenFindings = openFindings.filter((finding) => isAdvisoryFinding(finding));
+  if (blockingOpenFindings.length > 0) {
+    blockers.push(`unresolved findings: ${blockingOpenFindings.map((f) => f.id).join(", ")}`);
+  }
+  for (const finding of advisoryOpenFindings) {
+    warnings.push(`advisory finding (non-blocking): ${finding.id}`);
   }
 
   const unresolvedMustPrincipleViolations = manifest.findings.filter((finding) => {
     return (
       finding.type === "quality_principle_violation" &&
       finding.priority === "must" &&
-      !["verified", "resolved"].includes(finding.status)
+      !["verified", "resolved"].includes(finding.status) &&
+      !isAdvisoryFinding(finding)
     );
   });
   if (unresolvedMustPrincipleViolations.length > 0) {
@@ -195,18 +237,34 @@ export function reduceQualityGate(manifest, policy = DEFAULT_RELEASE_POLICY) {
 
   blockers.push(...contextBlockers(manifest, effectivePolicy.context));
 
+  const minReviewerScore = effectivePolicy.review?.minReviewerScore;
+  if (typeof minReviewerScore === "number" && Number.isFinite(minReviewerScore)) {
+    const inlineScores = Array.isArray(manifest.reviewerScores?.scores)
+      ? manifest.reviewerScores.scores
+      : [];
+    for (const score of inlineScores) {
+      if (typeof score.overall === "number" && score.overall < minReviewerScore) {
+        warnings.push(
+          `reviewer ${score.runnerId} score ${score.overall} below advisory threshold ${minReviewerScore}`
+        );
+      }
+    }
+  }
+
   if (blockers.length > 0) {
     return {
       status: "incomplete",
       exitCode: 2,
-      reasons: blockers
+      reasons: blockers,
+      warnings: [...warnings].sort()
     };
   }
 
   return {
     status: "passed",
     exitCode: 0,
-    reasons: []
+    reasons: [],
+    warnings: [...warnings].sort()
   };
 }
 
@@ -270,6 +328,19 @@ function mergePolicy(policy) {
   };
 }
 
+function findingSources(finding) {
+  const sources = new Set();
+  if (typeof finding.sourceRunnerId === "string" && finding.sourceRunnerId.length > 0) {
+    sources.add(finding.sourceRunnerId);
+  }
+  for (const runnerId of Array.isArray(finding.sourceRunnerIds) ? finding.sourceRunnerIds : []) {
+    if (typeof runnerId === "string" && runnerId.length > 0) {
+      sources.add(runnerId);
+    }
+  }
+  return [...sources];
+}
+
 function isSha256HexDigest(value) {
   return typeof value === "string" && /^[a-f0-9]{64}$/i.test(value);
 }
@@ -278,6 +349,7 @@ function failure(status, reasons) {
   return {
     status,
     exitCode: 1,
-    reasons
+    reasons,
+    warnings: []
   };
 }

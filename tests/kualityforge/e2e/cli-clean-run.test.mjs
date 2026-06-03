@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -30,6 +30,14 @@ test("CLI can initialize, collect clean reviews, decide, verify, and pass gate",
 
     const synthesize = runCli(["synthesize", "--artifact-root", root]);
     assert.equal(synthesize.status, 0, synthesize.stderr);
+
+    await access(join(root, "scores.json"));
+    await access(join(root, "induced-principles.json"));
+    const manifestAfterSynthesis = JSON.parse(
+      await readFile(join(root, "manifest.json"), "utf8")
+    );
+    assert.equal(manifestAfterSynthesis.reviewerScores.artifact, "scores.json");
+    assert.equal(manifestAfterSynthesis.inducedPrinciples.artifact, "induced-principles.json");
 
     const decision = join(root, "decision-input.md");
     await writeFile(decision, "# Decision\n\nNo findings to approve.\n", "utf8");

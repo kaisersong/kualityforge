@@ -96,6 +96,23 @@ test("createKswarmReviewerNodeInput includes context and review artifact instruc
   assert.match(input.prompt, /contextRead/);
 });
 
+test("createKswarmReviewerNodeInput freezes the changeset and forbids self-diff", () => {
+  const input = createKswarmReviewerNodeInput({
+    runId: "release-1",
+    artifactRoot: "docs/quality/release-1",
+    runnerId: "codex:gpt-5",
+    target: ".",
+    outputArtifact: "reviews/codex-gpt-5.md",
+    parallelGroupId: "script-parallel-1"
+  });
+
+  assert.match(input.prompt, /context\/changeset\.md/);
+  assert.match(input.prompt, /Do NOT run your own git diff/);
+  assert.match(input.prompt, /patchTruncated/);
+  // Existing context wiring must remain intact.
+  assert.match(input.prompt, /context\/project-brief\.md/);
+});
+
 test("mapGateResultToKswarmTerminal blocks non-passed gates with artifact evidence", () => {
   const terminal = mapGateResultToKswarmTerminal(
     {

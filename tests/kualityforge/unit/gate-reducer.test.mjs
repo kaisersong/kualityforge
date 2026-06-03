@@ -157,6 +157,71 @@ test("unresolved must quality principle violation blocks release", () => {
   assert.match(result.reasons.join("\n"), /unresolved must quality principle violations: QF-PRINCIPLE-001/);
 });
 
+test("advisory changeset, scores, and induced principle refs do not change the gate", () => {
+  const manifest = completeManifest();
+  manifest.context = {
+    changeset: { artifact: "context/changeset.json", sha256: hexHash("a") }
+  };
+  manifest.reviewerScores = {
+    artifact: "scores.json",
+    status: "completed",
+    scores: [{ runnerId: "codex:r1", overall: 88.5 }]
+  };
+  manifest.inducedPrinciples = { artifact: "induced-principles.json", status: "completed" };
+
+  const result = reduceQualityGate(manifest);
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.exitCode, 0);
+});
+
+test("rejects unsafe reviewerScores and inducedPrinciples artifact paths", () => {
+  const manifest = completeManifest();
+  manifest.reviewerScores = { artifact: "../scores.json" };
+  manifest.inducedPrinciples = { artifact: "../induced-principles.json" };
+
+  const result = reduceQualityGate(manifest);
+
+  assert.equal(result.status, "invalid_artifact");
+  assert.match(result.reasons.join("\n"), /reviewerScores.artifact must stay within artifact root/);
+  assert.match(result.reasons.join("\n"), /inducedPrinciples.artifact must stay within artifact root/);
+});
+
+test("advisory minReviewerScore only produces a warning, never a blocker", () => {
+  const review = {
+    mode: "required_all",
+    requiredReviewers: ["codex:r1", "claude:r2"],
+    minReviewerScore: 60
+  };
+  const manifest = {
+    runId: "qf-score-advisory",
+    status: "verified",
+    reviewPolicy: { ...review },
+    reviewers: [
+      { runnerId: "codex:r1", status: "completed", artifact: "reviews/codex.md" },
+      { runnerId: "claude:r2", status: "completed", artifact: "reviews/claude.md" }
+    ],
+    humanDecision: { artifact: "decision.md" },
+    fixer: { runnerId: "codex:fixer" },
+    verification: { runnerId: "claude:verifier", status: "verified", artifact: "verify.md" },
+    findings: [],
+    requiredChecks: [{ name: "npm test", status: "passed" }],
+    reviewerScores: {
+      artifact: "scores.json",
+      scores: [
+        { runnerId: "codex:r1", overall: 40 },
+        { runnerId: "claude:r2", overall: 90 }
+      ]
+    }
+  };
+
+  const result = reduceQualityGate(manifest, { review: { ...review } });
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.exitCode, 0);
+  assert.match(result.warnings.join("\n"), /reviewer codex:r1 score 40 below advisory threshold 60/);
+});
+
 function completeManifest() {
   return {
     runId: "qf-run-complete",
