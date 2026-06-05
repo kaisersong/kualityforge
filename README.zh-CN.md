@@ -196,6 +196,16 @@ kualityforge/
       index.mjs
     core/
       gate-reducer.mjs
+      context-pack.mjs
+      changeset.mjs
+      synthesis.mjs
+      reviewer-scoring.mjs
+      principle-induction.mjs
+      report.mjs
+      artifact-operations.mjs
+      kswarm-workflow.mjs
+      kswarm-runtime-executor.mjs
+      kswarm-brokered-runtime.mjs
     index.mjs
   schemas/
     manifest.schema.json
@@ -203,6 +213,8 @@ kualityforge/
     context-manifest.schema.json
     project-context.schema.json
     quality-principles.schema.json
+  templates/
+    report-template.md
   tests/
     kualityforge/
       unit/
