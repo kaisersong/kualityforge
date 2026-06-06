@@ -57,10 +57,10 @@ kualityforge kswarm-run \
 ### 3. 生成报告
 
 ```bash
-kualityforge report --artifact-root "docs/quality/${RUN_ID}" --html --lang zh
+kualityforge report --artifact-root "docs/quality/${RUN_ID}" --html --lang zh && open "docs/quality/${RUN_ID}/reports/"*.html
 ```
 
-向用户展示：gate 状态、共识发现、评审员评分排名、归纳质量原则候选、报告路径。
+向用户展示：gate 状态、共识发现、评审员评分排名、归纳质量原则候选。HTML 报告会自动在浏览器中打开。
 
 ## 快速模式：单 Agent 评审
 
@@ -110,7 +110,7 @@ kualityforge write-review --artifact-root "docs/quality/${RUN_ID}" --input "docs
 
 ```bash
 kualityforge gate --artifact-root "docs/quality/${RUN_ID}"
-kualityforge report --artifact-root "docs/quality/${RUN_ID}" --html --lang zh
+kualityforge report --artifact-root "docs/quality/${RUN_ID}" --html --lang zh && open "docs/quality/${RUN_ID}/reports/"*.html
 ```
 
 ## 规则
