@@ -3,6 +3,76 @@
 // principle candidates. Pure rendering — no IO. Std-lib only.
 
 export const DEFAULT_REPORT_OUT_DIR = "kualityforge-reports";
+export const DEFAULT_LANG = "zh";
+
+const LABELS = {
+  zh: {
+    title: "KualityForge 评审报告",
+    field: "字段", value: "值",
+    profile: "Profile", gateStatus: "Gate 状态",
+    gateReasons: "Gate 原因", gateWarnings: "Gate 警告",
+    changeset: "变更集",
+    noChangesetFrozen: "未冻结变更集",
+    noChangesetReason: (r) => `未冻结变更集（${r}）`,
+    base: "Base", head: "Head", filesChanged: "变更文件数",
+    patchTruncated: "Patch 截断",
+    patchTruncatedYes: "是（部分 hunk 超出范围）", patchTruncatedNo: "否",
+    status: "状态", path: "路径",
+    findingsTitle: "发现 (F#)",
+    noFindings: "未发现问题。",
+    fNum: "#", fTitle: "标题", fSeverity: "严重程度", fStatus: "状态", fReviewers: "评审员", fCount: "数量", fId: "Id",
+    consensusTitle: "共识发现 (G#)",
+    noConsensus: "无共识发现（>=2 名评审员）。",
+    scoresTitle: "评审员评分",
+    noScores: "未计算评审员评分。",
+    sReviewer: "评审员", sScore: "分数", sFindings: "Findings 数", sConsensus: "共识率", sRole: "角色",
+    ranking: "排名",
+    principlesTitle: "归纳质量原则候选 (P#, 咨询性)",
+    noPrinciples: "未归纳候选原则。",
+    pNum: "#", pPriority: "优先级", pStatement: "描述", pId: "Id",
+    decisionsTitle: "决策与验证",
+    gateDecision: "Gate 决策",
+    totalFindings: (total, consensus) => `${total} 个，${consensus} 个达成共识`,
+    inducedCount: (n) => `${n} 个（咨询性；是否纳入由人工决定）`,
+    findingsLabel: "总发现数", inducedLabel: "归纳候选原则",
+    htmlLang: "zh",
+  },
+  en: {
+    title: "KualityForge Report",
+    field: "Field", value: "Value",
+    profile: "Profile", gateStatus: "Gate status",
+    gateReasons: "Gate reasons", gateWarnings: "Gate warnings",
+    changeset: "Changeset",
+    noChangesetFrozen: "No changeset was frozen.",
+    noChangesetReason: (r) => `No changeset was frozen (${r}).`,
+    base: "Base", head: "Head", filesChanged: "Files changed",
+    patchTruncated: "Patch truncated",
+    patchTruncatedYes: "yes (some hunks out of scope)", patchTruncatedNo: "no",
+    status: "Status", path: "Path",
+    findingsTitle: "Findings (F#)",
+    noFindings: "No findings were reported.",
+    fNum: "#", fTitle: "Title", fSeverity: "Severity", fStatus: "Status", fReviewers: "Reviewers", fCount: "Count", fId: "Id",
+    consensusTitle: "Consensus Findings (G#)",
+    noConsensus: "No findings reached consensus (>= 2 reviewers).",
+    scoresTitle: "Reviewer Scores",
+    noScores: "No reviewer scores were computed.",
+    sReviewer: "Reviewer", sScore: "Score", sFindings: "Findings", sConsensus: "Consensus", sRole: "Role",
+    ranking: "Ranking",
+    principlesTitle: "Induced Principle Candidates (P#, advisory)",
+    noPrinciples: "No candidate principles were induced.",
+    pNum: "#", pPriority: "Priority", pStatement: "Statement", pId: "Id",
+    decisionsTitle: "Decisions & Verification",
+    gateDecision: "Gate decision",
+    totalFindings: (total, consensus) => `${total} total, ${consensus} at consensus`,
+    inducedCount: (n) => `${n} (advisory; human decides adoption)`,
+    findingsLabel: "Findings", inducedLabel: "Induced candidates",
+    htmlLang: "en",
+  }
+};
+
+function getLabels(lang) {
+  return LABELS[lang] || LABELS[DEFAULT_LANG];
+}
 
 // Resolves the report output directory. Precedence: explicit value, then the
 // KUALITYFORGE_REPORT_OUT_DIR environment variable, then the supplied fallback
@@ -43,40 +113,41 @@ export function buildReportModel({
   };
 }
 
-export function renderReportMarkdown(model) {
-  const lines = [`# KualityForge Report: ${model.runId}`, ""];
+export function renderReportMarkdown(model, { lang = DEFAULT_LANG } = {}) {
+  const L = getLabels(lang);
+  const lines = [`# ${L.title}: ${model.runId}`, ""];
 
-  lines.push("| Field | Value |");
+  lines.push(`| ${L.field} | ${L.value} |`);
   lines.push("| --- | --- |");
-  lines.push(`| Profile | ${mdCell(model.profile)} |`);
-  lines.push(`| Gate status | ${mdCell(model.gateStatus)} |`);
+  lines.push(`| ${L.profile} | ${mdCell(model.profile)} |`);
+  lines.push(`| ${L.gateStatus} | ${mdCell(model.gateStatus)} |`);
   if (model.gateReasons.length > 0) {
-    lines.push(`| Gate reasons | ${model.gateReasons.map(mdCell).join("<br>")} |`);
+    lines.push(`| ${L.gateReasons} | ${model.gateReasons.map(mdCell).join("<br>")} |`);
   }
   if (model.gateWarnings.length > 0) {
-    lines.push(`| Gate warnings | ${model.gateWarnings.map(mdCell).join("<br>")} |`);
+    lines.push(`| ${L.gateWarnings} | ${model.gateWarnings.map(mdCell).join("<br>")} |`);
   }
   lines.push("");
 
-  lines.push("## Changeset", "");
+  lines.push(`## ${L.changeset}`, "");
   if (!model.changeset || !model.changeset.available) {
     lines.push(
       model.changeset?.reason
-        ? `No changeset was frozen (${model.changeset.reason}).`
-        : "No changeset was frozen."
+        ? L.noChangesetReason(model.changeset.reason)
+        : L.noChangesetFrozen
     );
     lines.push("");
   } else {
-    lines.push("| Field | Value |");
+    lines.push(`| ${L.field} | ${L.value} |`);
     lines.push("| --- | --- |");
-    lines.push(`| Base | ${mdCell(model.changeset.base)} (${mdCell(shortSha(model.changeset.baseSha))}) |`);
-    lines.push(`| Head | ${mdCell(model.changeset.head)} (${mdCell(shortSha(model.changeset.headSha))}) |`);
-    lines.push(`| Files changed | ${mdCell(String(model.changeset.fileCount))} |`);
-    lines.push(`| Patch truncated | ${model.changeset.patchTruncated ? "yes (some hunks out of scope)" : "no"} |`);
+    lines.push(`| ${L.base} | ${mdCell(model.changeset.base)} (${mdCell(shortSha(model.changeset.baseSha))}) |`);
+    lines.push(`| ${L.head} | ${mdCell(model.changeset.head)} (${mdCell(shortSha(model.changeset.headSha))}) |`);
+    lines.push(`| ${L.filesChanged} | ${mdCell(String(model.changeset.fileCount))} |`);
+    lines.push(`| ${L.patchTruncated} | ${model.changeset.patchTruncated ? L.patchTruncatedYes : L.patchTruncatedNo} |`);
     lines.push("");
     const files = model.changeset.files || [];
     if (files.length > 0) {
-      lines.push("| Status | Path |");
+      lines.push(`| ${L.status} | ${L.path} |`);
       lines.push("| --- | --- |");
       for (const file of files) {
         lines.push(`| ${mdCell(file.status)} | ${mdCell(file.path)} |`);
@@ -85,11 +156,11 @@ export function renderReportMarkdown(model) {
     }
   }
 
-  lines.push("## Findings (F#)", "");
+  lines.push(`## ${L.findingsTitle}`, "");
   if (model.findings.length === 0) {
-    lines.push("No findings were reported.");
+    lines.push(L.noFindings);
   } else {
-    lines.push("| # | Title | Severity | Status | Reviewers | Count |");
+    lines.push(`| ${L.fNum} | ${L.fTitle} | ${L.fSeverity} | ${L.fStatus} | ${L.fReviewers} | ${L.fCount} |`);
     lines.push("| --- | --- | --- | --- | --- | --- |");
     model.findings.forEach((finding, index) => {
       const reviewers = (finding.sourceRunnerIds || []).join(", ") || finding.sourceRunnerId || "unknown";
@@ -101,11 +172,11 @@ export function renderReportMarkdown(model) {
   lines.push("");
 
   const consensusFindings = model.findings.filter((finding) => (finding.reviewerCount || 0) >= 2);
-  lines.push("## Consensus Findings (G#)", "");
+  lines.push(`## ${L.consensusTitle}`, "");
   if (consensusFindings.length === 0) {
-    lines.push("No findings reached consensus (>= 2 reviewers).");
+    lines.push(L.noConsensus);
   } else {
-    lines.push("| # | Title | Severity | Reviewers | Count |");
+    lines.push(`| ${L.fNum} | ${L.fTitle} | ${L.fSeverity} | ${L.fReviewers} | ${L.fCount} |`);
     lines.push("| --- | --- | --- | --- | --- |");
     consensusFindings.forEach((finding, index) => {
       const reviewers = (finding.sourceRunnerIds || []).join(", ") || finding.sourceRunnerId || "unknown";
@@ -116,11 +187,11 @@ export function renderReportMarkdown(model) {
   }
   lines.push("");
 
-  lines.push("## Reviewer Scores", "");
+  lines.push(`## ${L.scoresTitle}`, "");
   if (model.scores.length === 0) {
-    lines.push("No reviewer scores were computed.");
+    lines.push(L.noScores);
   } else {
-    lines.push("| Reviewer | Score | Findings | Consensus | Role |");
+    lines.push(`| ${L.sReviewer} | ${L.sScore} | ${L.sFindings} | ${L.sConsensus} | ${L.sRole} |`);
     lines.push("| --- | --- | --- | --- | --- |");
     for (const score of model.scores) {
       const consensusPct = score.stats.findingCount
@@ -132,16 +203,16 @@ export function renderReportMarkdown(model) {
     }
     if (model.ranking.length > 0) {
       lines.push("");
-      lines.push(`Ranking: ${model.ranking.join(" > ")}`);
+      lines.push(`${L.ranking}: ${model.ranking.join(" > ")}`);
     }
   }
   lines.push("");
 
-  lines.push("## Induced Principle Candidates (P#, advisory)", "");
+  lines.push(`## ${L.principlesTitle}`, "");
   if (model.inducedCandidates.length === 0) {
-    lines.push("No candidate principles were induced.");
+    lines.push(L.noPrinciples);
   } else {
-    lines.push("| # | Priority | Statement | Id |");
+    lines.push(`| ${L.pNum} | ${L.pPriority} | ${L.pStatement} | ${L.pId} |`);
     lines.push("| --- | --- | --- | --- |");
     model.inducedCandidates.forEach((candidate, index) => {
       lines.push(
@@ -151,69 +222,68 @@ export function renderReportMarkdown(model) {
   }
   lines.push("");
 
-  lines.push("## Decisions & Verification", "");
-  lines.push("| Field | Value |");
+  lines.push(`## ${L.decisionsTitle}`, "");
+  lines.push(`| ${L.field} | ${L.value} |`);
   lines.push("| --- | --- |");
-  lines.push(`| Gate decision | ${mdCell(model.gateStatus)} |`);
-  lines.push(`| Findings | ${model.findings.length} total, ${consensusFindings.length} at consensus |`);
-  lines.push(
-    `| Induced candidates | ${model.inducedCandidates.length} (advisory; human decides adoption) |`
-  );
+  lines.push(`| ${L.gateDecision} | ${mdCell(model.gateStatus)} |`);
+  lines.push(`| ${L.findingsLabel} | ${L.totalFindings(model.findings.length, consensusFindings.length)} |`);
+  lines.push(`| ${L.inducedLabel} | ${L.inducedCount(model.inducedCandidates.length)} |`);
   lines.push("");
 
   return `${lines.join("\n")}\n`;
 }
 
-export function renderReportHtml(model) {
+export function renderReportHtml(model, { lang = DEFAULT_LANG } = {}) {
+  const L = getLabels(lang);
   const parts = [];
   parts.push("<!doctype html>");
-  parts.push('<html lang="en"><head><meta charset="utf-8">');
-  parts.push(`<title>KualityForge Report: ${esc(model.runId)}</title>`);
+  parts.push(`<html lang="${L.htmlLang}"><head><meta charset="utf-8">`);
+  parts.push(`<title>${esc(L.title)}: ${esc(model.runId)}</title>`);
   parts.push(
     "<style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:960px;margin:2rem auto;padding:0 1rem;color:#1a1a1a}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:6px 10px;text-align:left}h2{margin-top:2rem}code{background:#f4f4f4;padding:1px 4px;border-radius:3px}.advisory{color:#8a6d3b}</style>"
   );
   parts.push("</head><body>");
-  parts.push(`<h1>KualityForge Report: ${esc(model.runId)}</h1>`);
+  parts.push(`<h1>${esc(L.title)}: ${esc(model.runId)}</h1>`);
   parts.push(
-    `<p>Profile: <code>${esc(model.profile)}</code> &middot; Gate status: <strong>${esc(model.gateStatus)}</strong></p>`
+    `<p>${esc(L.profile)}: <code>${esc(model.profile)}</code> &middot; ${esc(L.gateStatus)}: <strong>${esc(model.gateStatus)}</strong></p>`
   );
 
   if (model.gateReasons.length > 0) {
-    parts.push("<p>Gate reasons:</p><ul>");
+    parts.push(`<p>${esc(L.gateReasons)}:</p><ul>`);
     for (const reason of model.gateReasons) {
       parts.push(`<li>${esc(reason)}</li>`);
     }
     parts.push("</ul>");
   }
   if (model.gateWarnings.length > 0) {
-    parts.push("<p>Gate warnings:</p><ul>");
+    parts.push(`<p>${esc(L.gateWarnings)}:</p><ul>`);
     for (const warning of model.gateWarnings) {
       parts.push(`<li>${esc(warning)}</li>`);
     }
     parts.push("</ul>");
   }
 
-  parts.push("<h2>Changeset</h2>");
+  parts.push(`<h2>${esc(L.changeset)}</h2>`);
   if (!model.changeset || !model.changeset.available) {
     parts.push(
       `<p>${esc(
         model.changeset?.reason
-          ? `No changeset was frozen (${model.changeset.reason}).`
-          : "No changeset was frozen."
+          ? L.noChangesetReason(model.changeset.reason)
+          : L.noChangesetFrozen
       )}</p>`
     );
   } else {
     parts.push("<table><tbody>");
-    parts.push(`<tr><th>Base</th><td>${esc(model.changeset.base)} (${esc(shortSha(model.changeset.baseSha))})</td></tr>`);
-    parts.push(`<tr><th>Head</th><td>${esc(model.changeset.head)} (${esc(shortSha(model.changeset.headSha))})</td></tr>`);
-    parts.push(`<tr><th>Files changed</th><td>${esc(String(model.changeset.fileCount))}</td></tr>`);
+    parts.push(`<tr><th>${esc(L.base)}</th><td>${esc(model.changeset.base)} (${esc(shortSha(model.changeset.baseSha))})</td></tr>`);
+    parts.push(`<tr><th>${esc(L.head)}</th><td>${esc(model.changeset.head)} (${esc(shortSha(model.changeset.headSha))})</td></tr>`);
+    parts.push(`<tr><th>${esc(L.filesChanged)}</th><td>${esc(String(model.changeset.fileCount))}</td></tr>`);
     parts.push(
-      `<tr><th>Patch truncated</th><td>${model.changeset.patchTruncated ? "yes (some hunks out of scope)" : "no"}</td></tr>`
+      `<tr><th>${esc(L.patchTruncated)}</th><td>${model.changeset.patchTruncated ? esc(L.patchTruncatedYes) : esc(L.patchTruncatedNo)}</td></tr>`
     );
     parts.push("</tbody></table>");
     const files = model.changeset.files || [];
     if (files.length > 0) {
-      parts.push("<table><thead><tr><th>Status</th><th>Path</th></tr></thead><tbody>");
+      parts.push(`<table><thead><tr><th>${esc(L.status)}</th><th>${esc(L.path)}</th></tr></thead><tbody>`);
       for (const file of files) {
         parts.push(`<tr><td>${esc(file.status)}</td><td>${esc(file.path)}</td></tr>`);
       }
@@ -221,12 +291,12 @@ export function renderReportHtml(model) {
     }
   }
 
-  parts.push("<h2>Findings (F#)</h2>");
+  parts.push(`<h2>${esc(L.findingsTitle)}</h2>`);
   if (model.findings.length === 0) {
-    parts.push("<p>No findings were reported.</p>");
+    parts.push(`<p>${esc(L.noFindings)}</p>`);
   } else {
     parts.push(
-      "<table><thead><tr><th>#</th><th>Title</th><th>Severity</th><th>Status</th><th>Reviewers</th><th>Count</th><th>Id</th></tr></thead><tbody>"
+      `<table><thead><tr><th>${esc(L.fNum)}</th><th>${esc(L.fTitle)}</th><th>${esc(L.fSeverity)}</th><th>${esc(L.fStatus)}</th><th>${esc(L.fReviewers)}</th><th>${esc(L.fCount)}</th><th>${esc(L.fId)}</th></tr></thead><tbody>`
     );
     model.findings.forEach((finding, index) => {
       const reviewers = (finding.sourceRunnerIds || []).join(", ") || finding.sourceRunnerId || "unknown";
@@ -238,12 +308,12 @@ export function renderReportHtml(model) {
   }
 
   const consensusFindings = model.findings.filter((finding) => (finding.reviewerCount || 0) >= 2);
-  parts.push("<h2>Consensus Findings (G#)</h2>");
+  parts.push(`<h2>${esc(L.consensusTitle)}</h2>`);
   if (consensusFindings.length === 0) {
-    parts.push("<p>No findings reached consensus (&gt;= 2 reviewers).</p>");
+    parts.push(`<p>${esc(L.noConsensus)}</p>`);
   } else {
     parts.push(
-      "<table><thead><tr><th>#</th><th>Title</th><th>Severity</th><th>Reviewers</th><th>Count</th></tr></thead><tbody>"
+      `<table><thead><tr><th>${esc(L.fNum)}</th><th>${esc(L.fTitle)}</th><th>${esc(L.fSeverity)}</th><th>${esc(L.fReviewers)}</th><th>${esc(L.fCount)}</th></tr></thead><tbody>`
     );
     consensusFindings.forEach((finding, index) => {
       const reviewers = (finding.sourceRunnerIds || []).join(", ") || finding.sourceRunnerId || "unknown";
@@ -254,11 +324,11 @@ export function renderReportHtml(model) {
     parts.push("</tbody></table>");
   }
 
-  parts.push("<h2>Reviewer Scores</h2>");
+  parts.push(`<h2>${esc(L.scoresTitle)}</h2>`);
   if (model.scores.length === 0) {
-    parts.push("<p>No reviewer scores were computed.</p>");
+    parts.push(`<p>${esc(L.noScores)}</p>`);
   } else {
-    parts.push("<table><thead><tr><th>Reviewer</th><th>Score</th><th>Findings</th><th>Consensus</th><th>Role</th></tr></thead><tbody>");
+    parts.push(`<table><thead><tr><th>${esc(L.sReviewer)}</th><th>${esc(L.sScore)}</th><th>${esc(L.sFindings)}</th><th>${esc(L.sConsensus)}</th><th>${esc(L.sRole)}</th></tr></thead><tbody>`);
     for (const score of model.scores) {
       const consensusPct = score.stats.findingCount
         ? Math.round((score.stats.corroboratedCount / score.stats.findingCount) * 100)
@@ -269,16 +339,16 @@ export function renderReportHtml(model) {
     }
     parts.push("</tbody></table>");
     if (model.ranking.length > 0) {
-      parts.push(`<p>Ranking: ${esc(model.ranking.join(" > "))}</p>`);
+      parts.push(`<p>${esc(L.ranking)}: ${esc(model.ranking.join(" > "))}</p>`);
     }
   }
 
-  parts.push('<h2 class="advisory">Induced Principle Candidates (P#, advisory)</h2>');
+  parts.push(`<h2 class="advisory">${esc(L.principlesTitle)}</h2>`);
   if (model.inducedCandidates.length === 0) {
-    parts.push("<p>No candidate principles were induced.</p>");
+    parts.push(`<p>${esc(L.noPrinciples)}</p>`);
   } else {
     parts.push(
-      "<table><thead><tr><th>#</th><th>Priority</th><th>Statement</th><th>Id</th></tr></thead><tbody>"
+      `<table><thead><tr><th>${esc(L.pNum)}</th><th>${esc(L.pPriority)}</th><th>${esc(L.pStatement)}</th><th>${esc(L.pId)}</th></tr></thead><tbody>`
     );
     model.inducedCandidates.forEach((candidate, index) => {
       parts.push(
@@ -288,12 +358,10 @@ export function renderReportHtml(model) {
     parts.push("</tbody></table>");
   }
 
-  parts.push("<h2>Decisions &amp; Verification</h2><ul>");
-  parts.push(`<li>Gate decision: ${esc(model.gateStatus)}</li>`);
-  parts.push(`<li>Findings: ${esc(String(model.findings.length))} total, ${esc(String(consensusFindings.length))} at consensus.</li>`);
-  parts.push(
-    `<li>Induced principle candidates: ${esc(String(model.inducedCandidates.length))} (advisory; human decides adoption).</li>`
-  );
+  parts.push(`<h2>${esc(L.decisionsTitle)}</h2><ul>`);
+  parts.push(`<li>${esc(L.gateDecision)}: ${esc(model.gateStatus)}</li>`);
+  parts.push(`<li>${esc(L.findingsLabel)}: ${esc(L.totalFindings(model.findings.length, consensusFindings.length))}</li>`);
+  parts.push(`<li>${esc(L.inducedLabel)}: ${esc(L.inducedCount(model.inducedCandidates.length))}</li>`);
   parts.push("</ul>");
 
   parts.push("</body></html>");

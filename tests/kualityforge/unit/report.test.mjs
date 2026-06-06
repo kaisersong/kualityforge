@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  DEFAULT_LANG,
   DEFAULT_REPORT_OUT_DIR,
   buildReportModel,
   renderReportHtml,
@@ -65,7 +66,7 @@ test("resolveReportOutDir honors an explicit fallback over the built-in default"
 });
 
 test("renderReportMarkdown numbers findings, consensus, and principles", () => {
-  const md = renderReportMarkdown(sampleModel());
+  const md = renderReportMarkdown(sampleModel(), { lang: "en" });
   assert.match(md, /## Findings \(F#\)/);
   assert.match(md, /\| F1 \| Alpha \| warning \| open \| x, y \| 2 \|/);
   assert.match(md, /\| F2 \| Beta \| info \| open \| x \| 1 \|/);
@@ -79,7 +80,7 @@ test("renderReportMarkdown numbers findings, consensus, and principles", () => {
 });
 
 test("renderReportHtml numbers findings, consensus, and principles", () => {
-  const html = renderReportHtml(sampleModel());
+  const html = renderReportHtml(sampleModel(), { lang: "en" });
   assert.match(html, /<h2>Findings \(F#\)<\/h2>/);
   assert.match(html, /<td>F1<\/td><td>Alpha<\/td>/);
   assert.match(html, /<h2>Consensus Findings \(G#\)<\/h2>/);
@@ -94,7 +95,19 @@ test("renderReportMarkdown reports absence of consensus and principles", () => {
     manifest: { runId: "r", findings: [{ id: "qf-x", title: "Solo", severity: "info", status: "open", reviewerCount: 1 }] },
     gate: { status: "passed" }
   });
-  const md = renderReportMarkdown(model);
+  const md = renderReportMarkdown(model, { lang: "en" });
   assert.match(md, /No findings reached consensus \(>= 2 reviewers\)\./);
   assert.match(md, /No candidate principles were induced\./);
+});
+
+test("DEFAULT_LANG is zh and default render uses Chinese labels", () => {
+  assert.equal(DEFAULT_LANG, "zh");
+  const model = buildReportModel({ manifest: { runId: "t" }, gate: { status: "open" } });
+  const md = renderReportMarkdown(model);
+  assert.match(md, /# KualityForge 评审报告: t/);
+  assert.match(md, /## 变更集/);
+  assert.match(md, /未冻结变更集/);
+  const html = renderReportHtml(model);
+  assert.match(html, /lang="zh"/);
+  assert.match(html, /评审报告/);
 });

@@ -1,4 +1,5 @@
 import { safeArtifactName } from "./review-artifact.mjs";
+import { DEFAULT_LANG } from "./report.mjs";
 
 // Deterministic, advisory induction of candidate quality principles from the
 // merged findings of one review round. Output matches the quality-principles
@@ -20,7 +21,8 @@ const SEVERITY_TO_PRIORITY = new Map([
 export function inducePrinciples({
   synthesizedFindings = [],
   reviewers = [],
-  existingPrinciples = []
+  existingPrinciples = [],
+  lang = DEFAULT_LANG
 } = {}) {
   const existingIds = new Set(
     (Array.isArray(existingPrinciples) ? existingPrinciples : [])
@@ -59,7 +61,7 @@ export function inducePrinciples({
 
   const candidates = clusters
     .filter((cluster) => !cluster.matchedExistingPrincipleId)
-    .map((cluster) => buildCandidate(cluster))
+    .map((cluster) => buildCandidate(cluster, lang))
     .filter((candidate) => !existingIds.has(candidate.id));
 
   const takenIds = new Set(existingIds);
@@ -121,7 +123,7 @@ export function renderInducedPrinciplesMarkdown(result) {
   return `${lines.join("\n")}\n`;
 }
 
-function buildCandidate(cluster) {
+function buildCandidate(cluster, lang) {
   const priority = SEVERITY_TO_PRIORITY.get(cluster.maxSeverity) || "prefer";
   const label = cluster.titles[0] || cluster.key;
   const findingCount = cluster.findingIds.length;
@@ -130,12 +132,23 @@ function buildCandidate(cluster) {
   if (reviewerCount >= 2) {
     evidenceRequired.push("consensus");
   }
+
+  let statement;
+  let failureMode;
+  if (lang === "zh") {
+    statement = `变更应避免「${label}」（在 ${findingCount} 条发现中由 ${reviewerCount} 位评审员观察到）。`;
+    failureMode = `重复问题：${cluster.titles.slice(0, 3).join("；") || label}。`;
+  } else {
+    statement = `Changes should avoid "${label}" (observed in ${findingCount} finding(s) across ${reviewerCount} reviewer(s)).`;
+    failureMode = `Recurring issue: ${cluster.titles.slice(0, 3).join("; ") || label}.`;
+  }
+
   return {
     id: `induced-${safeArtifactName(cluster.key) || "finding"}`,
     priority,
-    statement: `Changes should avoid "${label}" (observed in ${findingCount} finding(s) across ${reviewerCount} reviewer(s)).`,
+    statement,
     appliesTo: ["change"],
-    failureMode: `Recurring issue: ${cluster.titles.slice(0, 3).join("; ") || label}.`,
+    failureMode,
     evidenceRequired
   };
 }

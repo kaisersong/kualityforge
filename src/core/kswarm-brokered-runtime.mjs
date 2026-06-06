@@ -119,7 +119,8 @@ export async function runKswarmBrokeredRuntimePlan(options = {}) {
       parallelGroupId,
       reviewerRole: role,
       quorumMember,
-      required: role === "required"
+      required: role === "required",
+      lang: options.lang
     });
     const dispatched = await kswarmClient.dispatchWorkflowScriptAgentNode(projectId, workflowRunId, nodeInput);
     const nodeId = dispatched?.nodeId;
@@ -267,7 +268,7 @@ export async function runKswarmBrokeredRuntimePlan(options = {}) {
     await persistReviewMetadata(runtimePlan.artifactRoot, reviewPolicy, outcomes);
   }
 
-  const synthesis = await synthesizeArtifactRoot(runtimePlan.artifactRoot);
+  const synthesis = await synthesizeArtifactRoot(runtimePlan.artifactRoot, { lang: options.lang });
 
   const decisionOperation = runtimePlan.operations.find((operation) => operation.type === "request_human_decision");
   if (decisionOperation?.required && typeof decisionProvider !== "function") {

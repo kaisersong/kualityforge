@@ -61,7 +61,7 @@ export async function writeReviewFileToArtifactRoot(artifactRoot, input, options
   });
 }
 
-export async function synthesizeArtifactRoot(artifactRoot) {
+export async function synthesizeArtifactRoot(artifactRoot, options = {}) {
   const { manifest } = await loadManifestFromArtifactRoot(artifactRoot);
   const findings = synthesizeFindings(manifest.findings);
   const contextGaps = manifest.reviewers
@@ -81,7 +81,8 @@ export async function synthesizeArtifactRoot(artifactRoot) {
   const induced = inducePrinciples({
     synthesizedFindings: findings,
     reviewers: manifest.reviewers,
-    existingPrinciples
+    existingPrinciples,
+    lang: options.lang
   });
   const inducedWithTimestamp = { ...induced, generatedAt: new Date().toISOString() };
 
@@ -170,13 +171,14 @@ export async function writeReportFromArtifactRoot(artifactRoot, options = {}) {
   const outDir = resolveReportOutDir(options.outDir, process.env, join(artifactRoot, "reports"));
   await mkdir(outDir, { recursive: true });
   const baseName = `${safeArtifactName(manifest.runId || "run")}-report`;
+  const langOpt = { lang: options.lang };
   const markdownPath = join(outDir, `${baseName}.md`);
-  await writeFile(markdownPath, renderReportMarkdown(model), "utf8");
+  await writeFile(markdownPath, renderReportMarkdown(model, langOpt), "utf8");
 
   const result = { markdownPath };
   if (options.html) {
     const htmlPath = join(outDir, `${baseName}.html`);
-    await writeFile(htmlPath, renderReportHtml(model), "utf8");
+    await writeFile(htmlPath, renderReportHtml(model, langOpt), "utf8");
     result.htmlPath = htmlPath;
   }
   return result;

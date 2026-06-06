@@ -223,6 +223,7 @@ try {
         pollIntervalMs,
         timeoutMs,
         policy,
+        lang: readOption(args, "--lang") || undefined,
         ...sharedProviders
       });
 
@@ -230,6 +231,7 @@ try {
         ? await writeReportFromArtifactRoot(runtimePlan.artifactRoot, {
             outDir: readOption(args, "--report-out") || undefined,
             html: args.includes("--html"),
+            lang: readOption(args, "--lang") || undefined,
             gate: result.gate
           })
         : null;
@@ -260,6 +262,7 @@ try {
       runtimePlan,
       kswarmClient: offlineKswarm,
       policy,
+      lang: readOption(args, "--lang") || undefined,
       reviewerRunner: async ({ reviewer, role }) => {
         const input = reviewInputs.get(reviewer.runnerId);
         if (!input) {
@@ -277,6 +280,7 @@ try {
       ? await writeReportFromArtifactRoot(runtimePlan.artifactRoot, {
           outDir: readOption(args, "--report-out") || undefined,
           html: args.includes("--html"),
+          lang: readOption(args, "--lang") || undefined,
           gate: result.gate
         })
       : null;
@@ -324,7 +328,8 @@ try {
 
   if (command === "synthesize") {
     const artifactRoot = requireOption(args, "--artifact-root", "synthesize");
-    const output = await synthesizeArtifactRoot(artifactRoot);
+    const lang = readOption(args, "--lang") || undefined;
+    const output = await synthesizeArtifactRoot(artifactRoot, { lang });
     console.log(JSON.stringify({ status: "synthesized", ...output }, null, 2));
     process.exit(0);
   }
@@ -360,7 +365,8 @@ try {
     const artifactRoot = requireOption(args, "--artifact-root", "report");
     const outDir = readOption(args, "--out") || readOption(args, "--report-out") || undefined;
     const html = args.includes("--html");
-    const result = await writeReportFromArtifactRoot(artifactRoot, { outDir, html });
+    const lang = readOption(args, "--lang") || undefined;
+    const result = await writeReportFromArtifactRoot(artifactRoot, { outDir, html, lang });
     console.log(JSON.stringify({ status: "report_written", ...result }, null, 2));
     process.exit(0);
   }

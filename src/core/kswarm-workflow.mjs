@@ -184,7 +184,7 @@ export function createKswarmReviewerNodeInput(options = {}) {
   const reviewerRole = options.reviewerRole === "advisory" ? "advisory" : "required";
   const quorumMember = options.quorumMember === undefined ? true : Boolean(options.quorumMember);
   const required = options.required === undefined ? reviewerRole === "required" : Boolean(options.required);
-  const prompt = [
+  const promptLines = [
     "You are a KualityForge reviewer running inside a KSwarm dynamic workflow.",
     "",
     "Review target:",
@@ -221,7 +221,12 @@ export function createKswarmReviewerNodeInput(options = {}) {
     "```",
     "",
     `Save the artifact to ${normalized.outputArtifact}. KSwarm node summaries alone are not KualityForge gate evidence.`
-  ].join("\n");
+  ];
+  if (normalized.lang === "zh") {
+    promptLines.push("");
+    promptLines.push("语言要求：所有 finding 的 title、description、suggestion 字段必须使用中文撰写。duplicateKey 和 id 保持英文 slug。");
+  }
+  const prompt = promptLines.join("\n");
 
   return {
     phaseTitle: "Parallel Review",
@@ -297,7 +302,8 @@ function normalizeReviewerNodeOptions(options) {
     runnerId,
     target: options.target || ".",
     outputArtifact: options.outputArtifact || `reviews/${safeArtifactName(runnerId)}.md`,
-    parallelGroupId: requireString(options.parallelGroupId, "parallelGroupId")
+    parallelGroupId: requireString(options.parallelGroupId, "parallelGroupId"),
+    lang: options.lang || null
   };
 }
 

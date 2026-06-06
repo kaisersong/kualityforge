@@ -33,12 +33,12 @@ test("report command writes Markdown and HTML with scores and induced sections",
     assert.ok(result.htmlPath.endsWith("report-run-report.html"));
 
     const markdown = await readFile(result.markdownPath, "utf8");
-    assert.match(markdown, /Reviewer Scores/);
-    assert.match(markdown, /Induced Principle Candidates/);
+    assert.match(markdown, /评审员评分/);
+    assert.match(markdown, /归纳质量原则候选/);
 
     const html = await readFile(result.htmlPath, "utf8");
-    assert.match(html, /Reviewer Scores/);
-    assert.match(html, /Induced Principle Candidates/);
+    assert.match(html, /评审员评分/);
+    assert.match(html, /归纳质量原则候选/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

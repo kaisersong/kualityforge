@@ -35,6 +35,7 @@ export { inducePrinciples, renderInducedPrinciplesMarkdown } from "./core/princi
 export {
   DEFAULT_REPORT_OUT_DIR,
   buildReportModel,
+  DEFAULT_LANG,
   renderReportHtml,
   renderReportMarkdown,
   resolveReportOutDir
