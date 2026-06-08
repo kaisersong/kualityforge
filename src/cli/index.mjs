@@ -362,10 +362,47 @@ try {
   }
 
   if (command === "report") {
-    const artifactRoot = requireOption(args, "--artifact-root", "report");
+    const artifactRoot = readOption(args, "--artifact-root");
+    const inputPath = readOption(args, "--input");
     const outDir = readOption(args, "--out") || readOption(args, "--report-out") || undefined;
+    const outputFile = readOption(args, "--output");
     const html = args.includes("--html");
     const lang = readOption(args, "--lang") || undefined;
+
+    if (inputPath) {
+      const raw = JSON.parse(await readFile(inputPath, "utf8"));
+      const { buildReportModel, renderReportHtml, renderReportMarkdown } = await import("../core/report.mjs");
+      const model = buildReportModel({
+        manifest: raw.manifest || raw,
+        summaryMarkdown: raw.summaryMarkdown || "",
+        scores: raw.scores || null,
+        inducedPrinciples: raw.inducedPrinciples || null,
+        changeset: raw.changeset || null,
+        gate: raw.gate || null,
+        reviewType: raw.reviewType || "changeset",
+        projectOverview: raw.projectOverview || null,
+        reviewerDetails: raw.reviewerDetails || null,
+        riskMatrix: raw.riskMatrix || null,
+        actionPlan: raw.actionPlan || null,
+        overallGrade: raw.overallGrade || null
+      });
+      const langOpt = { lang };
+      const runId = model.runId || "run";
+
+      if (outputFile) {
+        const content = html ? renderReportHtml(model, langOpt) : renderReportMarkdown(model, langOpt);
+        await writeFile(outputFile, content, "utf8");
+        console.log(JSON.stringify({ status: "report_written", path: outputFile, format: html ? "html" : "markdown" }, null, 2));
+      } else {
+        const content = html ? renderReportHtml(model, langOpt) : renderReportMarkdown(model, langOpt);
+        process.stdout.write(content);
+      }
+      process.exit(0);
+    }
+
+    if (!artifactRoot) {
+      throw new Error("report requires --artifact-root <path> or --input <manifest.json>");
+    }
     const result = await writeReportFromArtifactRoot(artifactRoot, { outDir, html, lang });
     console.log(JSON.stringify({ status: "report_written", ...result }, null, 2));
     process.exit(0);
@@ -556,6 +593,7 @@ Usage:
   kualityforge gate --manifest <path>
   kualityforge gate --artifact-root <path> [--policy <path>]
   kualityforge report --artifact-root <path> [--out <dir>|--report-out <dir>] [--html]
+  kualityforge report --input <manifest.json> [--html] [--lang <zh|en>] [--output <file>]
   kualityforge kswarm-preview --project-id <id> --run-id <id> --artifact-root <path> --reviewer <runner-id>... [--advisory-reviewer <runner-id>...] [--quorum-min <n>] [--project-root <path>] [--docs-root <path>] [--quality-principles <json>] [--change-goal <text>] [--target <path>] [--requested-by <id>]
   kualityforge kswarm-run --offline --preview <preview.json> --plan <runtime-plan.json> --review <runner-id=review.md>... [--advisory-reviewer <runner-id>...] [--quorum-min <n>] --decision <decision.md> --check <name=status> [--verify <verify.md> --verifier-runner-id <id>]
   kualityforge kswarm-run --mode brokered --kswarm-url <url> --preview <preview.json> --plan <runtime-plan.json> [--advisory-reviewer <runner-id>...] [--quorum-min <n>] --decision <decision.md> --check <name=status> [--verify <verify.md> --verifier-runner-id <id>] [--poll-interval-ms <ms>] [--timeout-ms <ms>]

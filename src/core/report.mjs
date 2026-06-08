@@ -35,6 +35,21 @@ const LABELS = {
     totalFindings: (total, consensus) => `${total} 个，${consensus} 个达成共识`,
     inducedCount: (n) => `${n} 个（咨询性；是否纳入由人工决定）`,
     findingsLabel: "总发现数", inducedLabel: "归纳候选原则",
+    reviewType: "评审模式", reviewTypeChangeset: "变更集评审", reviewTypeFullProject: "全量项目评审",
+    projectOverviewTitle: "项目概览",
+    projectName: "项目名称", projectVersion: "版本", reviewScope: "评审范围",
+    techStack: "技术栈", codeScale: "代码规模", reviewerCountLabel: "评审员数",
+    reviewerDetailsTitle: "评审员详细分析 (R#)",
+    rSubDim: "子维度", rScore: "评分", rFinding: "关键发现",
+    rTopIssues: "Top 问题", rSeverity: "严重度", rIssue: "问题", rLocation: "位置",
+    rImprovements: "改进建议", rPriority: "优先级", rSuggestion: "建议", rBenefit: "预期收益",
+    riskMatrixTitle: "风险矩阵",
+    rskName: "风险", rskProb: "概率", rskImpact: "影响", rskScore: "风险分", rskCategory: "类别", rskFindings: "关联 Finding",
+    actionPlanTitle: "行动路线",
+    actPriority: "优先级", actAction: "行动", actEffort: "预估投入", actFindings: "关联 Finding",
+    overallGradeTitle: "综合评级",
+    ogDim: "维度", ogScore: "评分", ogReviewer: "评审员",
+    ogGrade: "综合评级", ogReason: "评级理由", ogUpgradePath: "升级路径",
     htmlLang: "zh",
   },
   en: {
@@ -66,6 +81,21 @@ const LABELS = {
     totalFindings: (total, consensus) => `${total} total, ${consensus} at consensus`,
     inducedCount: (n) => `${n} (advisory; human decides adoption)`,
     findingsLabel: "Findings", inducedLabel: "Induced candidates",
+    reviewType: "Review type", reviewTypeChangeset: "Changeset review", reviewTypeFullProject: "Full-project review",
+    projectOverviewTitle: "Project Overview",
+    projectName: "Project", projectVersion: "Version", reviewScope: "Scope",
+    techStack: "Tech stack", codeScale: "Code scale", reviewerCountLabel: "Reviewers",
+    reviewerDetailsTitle: "Reviewer Details (R#)",
+    rSubDim: "Sub-dimension", rScore: "Score", rFinding: "Key findings",
+    rTopIssues: "Top issues", rSeverity: "Severity", rIssue: "Issue", rLocation: "Location",
+    rImprovements: "Improvements", rPriority: "Priority", rSuggestion: "Suggestion", rBenefit: "Expected benefit",
+    riskMatrixTitle: "Risk Matrix",
+    rskName: "Risk", rskProb: "Prob", rskImpact: "Impact", rskScore: "Risk score", rskCategory: "Category", rskFindings: "Related findings",
+    actionPlanTitle: "Action Plan",
+    actPriority: "Priority", actAction: "Action", actEffort: "Effort", actFindings: "Related findings",
+    overallGradeTitle: "Overall Grade",
+    ogDim: "Dimension", ogScore: "Score", ogReviewer: "Reviewer",
+    ogGrade: "Grade", ogReason: "Rationale", ogUpgradePath: "Upgrade path",
     htmlLang: "en",
   }
 };
@@ -94,7 +124,13 @@ export function buildReportModel({
   scores = null,
   inducedPrinciples = null,
   changeset = null,
-  gate = null
+  gate = null,
+  reviewType = "changeset",
+  projectOverview = null,
+  reviewerDetails = null,
+  riskMatrix = null,
+  actionPlan = null,
+  overallGrade = null
 } = {}) {
   return {
     runId: manifest.runId || "unknown-run",
@@ -109,7 +145,13 @@ export function buildReportModel({
     scores: scores?.scores || [],
     ranking: scores?.ranking || [],
     inducedCandidates: inducedPrinciples?.candidates || [],
-    summaryMarkdown
+    summaryMarkdown,
+    reviewType,
+    projectOverview,
+    reviewerDetails: Array.isArray(reviewerDetails) ? reviewerDetails : [],
+    riskMatrix: Array.isArray(riskMatrix) ? riskMatrix : [],
+    actionPlan: Array.isArray(actionPlan) ? actionPlan : [],
+    overallGrade
   };
 }
 
@@ -229,6 +271,95 @@ export function renderReportMarkdown(model, { lang = DEFAULT_LANG } = {}) {
   lines.push(`| ${L.findingsLabel} | ${L.totalFindings(model.findings.length, consensusFindings.length)} |`);
   lines.push(`| ${L.inducedLabel} | ${L.inducedCount(model.inducedCandidates.length)} |`);
   lines.push("");
+
+  if (model.reviewType === "full-project") {
+    if (model.projectOverview) {
+      lines.push(`## ${L.projectOverviewTitle}`, "");
+      const po = model.projectOverview;
+      lines.push(`| ${L.field} | ${L.value} |`);
+      lines.push("| --- | --- |");
+      if (po.name) lines.push(`| ${L.projectName} | ${mdCell(po.name)} |`);
+      if (po.version) lines.push(`| ${L.projectVersion} | ${mdCell(po.version)} |`);
+      if (po.scope) lines.push(`| ${L.reviewScope} | ${mdCell(po.scope)} |`);
+      if (po.techStack) lines.push(`| ${L.techStack} | ${mdCell(po.techStack)} |`);
+      if (po.codeScale) lines.push(`| ${L.codeScale} | ${mdCell(po.codeScale)} |`);
+      if (po.reviewerCount) lines.push(`| ${L.reviewerCountLabel} | ${mdCell(String(po.reviewerCount))} |`);
+      lines.push("");
+    }
+
+    if (model.reviewerDetails.length > 0) {
+      lines.push(`## ${L.reviewerDetailsTitle}`, "");
+      model.reviewerDetails.forEach((rd, index) => {
+        lines.push(`### R${index + 1}: ${mdCell(rd.runnerId || rd.name)}`, "");
+        if (rd.role) lines.push(`**${L.sRole}**: ${mdCell(rd.role)}`, "");
+        if (Array.isArray(rd.subDimensions) && rd.subDimensions.length > 0) {
+          lines.push(`| ${L.rSubDim} | ${L.rScore} | ${L.rFinding} |`);
+          lines.push("| --- | --- | --- |");
+          for (const sub of rd.subDimensions) {
+            lines.push(`| ${mdCell(sub.name)} | ${sub.score} | ${mdCell(sub.finding || "")} |`);
+          }
+          lines.push("");
+        }
+        if (Array.isArray(rd.topIssues) && rd.topIssues.length > 0) {
+          lines.push(`**${L.rTopIssues}**:`, "");
+          lines.push(`| ${L.rSeverity} | ${L.rIssue} | ${L.rLocation} |`);
+          lines.push("| --- | --- | --- |");
+          for (const issue of rd.topIssues) {
+            lines.push(`| ${mdCell(issue.severity)} | ${mdCell(issue.issue)} | ${mdCell(issue.location || "")} |`);
+          }
+          lines.push("");
+        }
+        if (Array.isArray(rd.improvements) && rd.improvements.length > 0) {
+          lines.push(`**${L.rImprovements}**:`, "");
+          lines.push(`| ${L.rPriority} | ${L.rSuggestion} | ${L.rBenefit} |`);
+          lines.push("| --- | --- | --- |");
+          for (const imp of rd.improvements) {
+            lines.push(`| ${mdCell(imp.priority)} | ${mdCell(imp.suggestion)} | ${mdCell(imp.benefit || "")} |`);
+          }
+          lines.push("");
+        }
+      });
+    }
+
+    if (model.riskMatrix.length > 0) {
+      lines.push(`## ${L.riskMatrixTitle}`, "");
+      lines.push(`| ${L.rskName} | ${L.rskProb} | ${L.rskImpact} | ${L.rskScore} | ${L.rskFindings} |`);
+      lines.push("| --- | --- | --- | --- | --- |");
+      for (const risk of model.riskMatrix) {
+        const findings = Array.isArray(risk.findings) ? risk.findings.join(", ") : (risk.findings || "");
+        lines.push(`| ${mdCell(risk.name)} | ${risk.probability} | ${risk.impact} | **${risk.probability * risk.impact}** | ${mdCell(findings)} |`);
+      }
+      lines.push("");
+    }
+
+    if (model.actionPlan.length > 0) {
+      lines.push(`## ${L.actionPlanTitle}`, "");
+      lines.push(`| ${L.actPriority} | ${L.actAction} | ${L.actEffort} | ${L.actFindings} |`);
+      lines.push("| --- | --- | --- | --- |");
+      for (const action of model.actionPlan) {
+        const findings = Array.isArray(action.findings) ? action.findings.join(", ") : (action.findings || "");
+        lines.push(`| ${mdCell(action.priority)} | ${mdCell(action.action)} | ${mdCell(action.effort || "")} | ${mdCell(findings)} |`);
+      }
+      lines.push("");
+    }
+
+    if (model.overallGrade) {
+      const og = model.overallGrade;
+      lines.push(`## ${L.overallGradeTitle}`, "");
+      if (Array.isArray(og.dimensions) && og.dimensions.length > 0) {
+        lines.push(`| ${L.ogDim} | ${L.ogScore} | ${L.ogReviewer} |`);
+        lines.push("| --- | --- | --- |");
+        for (const dim of og.dimensions) {
+          lines.push(`| ${mdCell(dim.name)} | ${dim.score} | ${mdCell(dim.reviewer || "")} |`);
+        }
+        lines.push("");
+      }
+      if (og.grade) lines.push(`**${L.ogGrade}**: ${mdCell(og.grade)}`, "");
+      if (og.reason) lines.push(`**${L.ogReason}**: ${mdCell(og.reason)}`, "");
+      if (og.upgradePath) lines.push(`**${L.ogUpgradePath}**: ${mdCell(og.upgradePath)}`, "");
+      lines.push("");
+    }
+  }
 
   return `${lines.join("\n")}\n`;
 }
@@ -363,6 +494,89 @@ export function renderReportHtml(model, { lang = DEFAULT_LANG } = {}) {
   parts.push(`<li>${esc(L.findingsLabel)}: ${esc(L.totalFindings(model.findings.length, consensusFindings.length))}</li>`);
   parts.push(`<li>${esc(L.inducedLabel)}: ${esc(L.inducedCount(model.inducedCandidates.length))}</li>`);
   parts.push("</ul>");
+
+  if (model.reviewType === "full-project") {
+    if (model.projectOverview) {
+      parts.push(`<h2>${esc(L.projectOverviewTitle)}</h2>`);
+      const po = model.projectOverview;
+      parts.push("<table><tbody>");
+      if (po.name) parts.push(`<tr><th>${esc(L.projectName)}</th><td>${esc(po.name)}</td></tr>`);
+      if (po.version) parts.push(`<tr><th>${esc(L.projectVersion)}</th><td>${esc(po.version)}</td></tr>`);
+      if (po.scope) parts.push(`<tr><th>${esc(L.reviewScope)}</th><td>${esc(po.scope)}</td></tr>`);
+      if (po.techStack) parts.push(`<tr><th>${esc(L.techStack)}</th><td>${esc(po.techStack)}</td></tr>`);
+      if (po.codeScale) parts.push(`<tr><th>${esc(L.codeScale)}</th><td>${esc(po.codeScale)}</td></tr>`);
+      if (po.reviewerCount) parts.push(`<tr><th>${esc(L.reviewerCountLabel)}</th><td>${esc(String(po.reviewerCount))}</td></tr>`);
+      parts.push("</tbody></table>");
+    }
+
+    if (model.reviewerDetails.length > 0) {
+      parts.push(`<h2>${esc(L.reviewerDetailsTitle)}</h2>`);
+      model.reviewerDetails.forEach((rd, index) => {
+        const label = `R${index + 1}: ${rd.runnerId || rd.name}`;
+        parts.push(`<details><summary>${esc(label)}</summary>`);
+        if (rd.role) parts.push(`<p><strong>${esc(L.sRole)}</strong>: ${esc(rd.role)}</p>`);
+        if (Array.isArray(rd.subDimensions) && rd.subDimensions.length > 0) {
+          parts.push(`<table><thead><tr><th>${esc(L.rSubDim)}</th><th>${esc(L.rScore)}</th><th>${esc(L.rFinding)}</th></tr></thead><tbody>`);
+          for (const sub of rd.subDimensions) {
+            parts.push(`<tr><td>${esc(sub.name)}</td><td>${esc(String(sub.score))}</td><td>${esc(sub.finding || "")}</td></tr>`);
+          }
+          parts.push("</tbody></table>");
+        }
+        if (Array.isArray(rd.topIssues) && rd.topIssues.length > 0) {
+          parts.push(`<p><strong>${esc(L.rTopIssues)}</strong></p>`);
+          parts.push(`<table><thead><tr><th>${esc(L.rSeverity)}</th><th>${esc(L.rIssue)}</th><th>${esc(L.rLocation)}</th></tr></thead><tbody>`);
+          for (const issue of rd.topIssues) {
+            parts.push(`<tr><td>${esc(issue.severity)}</td><td>${esc(issue.issue)}</td><td>${esc(issue.location || "")}</td></tr>`);
+          }
+          parts.push("</tbody></table>");
+        }
+        if (Array.isArray(rd.improvements) && rd.improvements.length > 0) {
+          parts.push(`<p><strong>${esc(L.rImprovements)}</strong></p>`);
+          parts.push(`<table><thead><tr><th>${esc(L.rPriority)}</th><th>${esc(L.rSuggestion)}</th><th>${esc(L.rBenefit)}</th></tr></thead><tbody>`);
+          for (const imp of rd.improvements) {
+            parts.push(`<tr><td>${esc(imp.priority)}</td><td>${esc(imp.suggestion)}</td><td>${esc(imp.benefit || "")}</td></tr>`);
+          }
+          parts.push("</tbody></table>");
+        }
+        parts.push("</details>");
+      });
+    }
+
+    if (model.riskMatrix.length > 0) {
+      parts.push(`<h2>${esc(L.riskMatrixTitle)}</h2>`);
+      parts.push(`<table><thead><tr><th>${esc(L.rskName)}</th><th>${esc(L.rskProb)}</th><th>${esc(L.rskImpact)}</th><th>${esc(L.rskScore)}</th><th>${esc(L.rskFindings)}</th></tr></thead><tbody>`);
+      for (const risk of model.riskMatrix) {
+        const findings = Array.isArray(risk.findings) ? risk.findings.join(", ") : (risk.findings || "");
+        parts.push(`<tr><td>${esc(risk.name)}</td><td>${esc(String(risk.probability))}</td><td>${esc(String(risk.impact))}</td><td><strong>${esc(String(risk.probability * risk.impact))}</strong></td><td>${esc(findings)}</td></tr>`);
+      }
+      parts.push("</tbody></table>");
+    }
+
+    if (model.actionPlan.length > 0) {
+      parts.push(`<h2>${esc(L.actionPlanTitle)}</h2>`);
+      parts.push(`<table><thead><tr><th>${esc(L.actPriority)}</th><th>${esc(L.actAction)}</th><th>${esc(L.actEffort)}</th><th>${esc(L.actFindings)}</th></tr></thead><tbody>`);
+      for (const action of model.actionPlan) {
+        const findings = Array.isArray(action.findings) ? action.findings.join(", ") : (action.findings || "");
+        parts.push(`<tr><td>${esc(action.priority)}</td><td>${esc(action.action)}</td><td>${esc(action.effort || "")}</td><td>${esc(findings)}</td></tr>`);
+      }
+      parts.push("</tbody></table>");
+    }
+
+    if (model.overallGrade) {
+      const og = model.overallGrade;
+      parts.push(`<h2>${esc(L.overallGradeTitle)}</h2>`);
+      if (Array.isArray(og.dimensions) && og.dimensions.length > 0) {
+        parts.push(`<table><thead><tr><th>${esc(L.ogDim)}</th><th>${esc(L.ogScore)}</th><th>${esc(L.ogReviewer)}</th></tr></thead><tbody>`);
+        for (const dim of og.dimensions) {
+          parts.push(`<tr><td>${esc(dim.name)}</td><td>${esc(String(dim.score))}</td><td>${esc(dim.reviewer || "")}</td></tr>`);
+        }
+        parts.push("</tbody></table>");
+      }
+      if (og.grade) parts.push(`<p><strong>${esc(L.ogGrade)}</strong>: ${esc(og.grade)}</p>`);
+      if (og.reason) parts.push(`<p><strong>${esc(L.ogReason)}</strong>: ${esc(og.reason)}</p>`);
+      if (og.upgradePath) parts.push(`<p><strong>${esc(L.ogUpgradePath)}</strong>: ${esc(og.upgradePath)}</p>`);
+    }
+  }
 
   parts.push("</body></html>");
   return `${parts.join("\n")}\n`;

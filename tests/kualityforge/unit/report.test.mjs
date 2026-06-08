@@ -111,3 +111,53 @@ test("DEFAULT_LANG is zh and default render uses Chinese labels", () => {
   assert.match(html, /lang="zh"/);
   assert.match(html, /评审报告/);
 });
+
+test("full-project mode renders project overview, reviewer details, risk matrix, action plan, and grade", () => {
+  const model = buildReportModel({
+    manifest: { runId: "fp-1", findings: [] },
+    gate: { status: "blocked" },
+    reviewType: "full-project",
+    projectOverview: { name: "TestProj", version: "1.0", techStack: "Node", codeScale: "10k LOC", reviewerCount: 2 },
+    reviewerDetails: [{
+      runnerId: "alice", role: "security",
+      subDimensions: [{ name: "auth", score: 7, finding: "weak tokens" }],
+      topIssues: [{ severity: "blocker", issue: "TLS bypass", location: "main.ts" }],
+      improvements: [{ priority: "P0", suggestion: "enable TLS", benefit: "fix CVE" }]
+    }],
+    riskMatrix: [{ name: "Electron CVE", probability: 5, impact: 5, findings: ["F1"] }],
+    actionPlan: [{ priority: "P0", action: "upgrade Electron", effort: "30d", findings: ["F1", "F2"] }],
+    overallGrade: { dimensions: [{ name: "security", score: 3, reviewer: "alice" }], grade: "C+", reason: "3 blockers" }
+  });
+
+  const md = renderReportMarkdown(model, { lang: "en" });
+  assert.match(md, /## Project Overview/);
+  assert.match(md, /TestProj/);
+  assert.match(md, /## Reviewer Details \(R#\)/);
+  assert.match(md, /### R1: alice/);
+  assert.match(md, /## Risk Matrix/);
+  assert.match(md, /Electron CVE/);
+  assert.match(md, /\*\*25\*\*/);
+  assert.match(md, /## Action Plan/);
+  assert.match(md, /upgrade Electron/);
+  assert.match(md, /## Overall Grade/);
+  assert.match(md, /C\+/);
+
+  const html = renderReportHtml(model, { lang: "en" });
+  assert.match(html, /<h2>Project Overview<\/h2>/);
+  assert.match(html, /<details><summary>R1: alice<\/summary>/);
+  assert.match(html, /<h2>Risk Matrix<\/h2>/);
+  assert.match(html, /<h2>Action Plan<\/h2>/);
+  assert.match(html, /<h2>Overall Grade<\/h2>/);
+});
+
+test("changeset mode does not render full-project sections", () => {
+  const model = buildReportModel({
+    manifest: { runId: "cs-1", findings: [] },
+    gate: { status: "passed" },
+    projectOverview: { name: "Hidden" },
+    riskMatrix: [{ name: "Hidden", probability: 1, impact: 1 }]
+  });
+  const md = renderReportMarkdown(model, { lang: "en" });
+  assert.doesNotMatch(md, /Project Overview/);
+  assert.doesNotMatch(md, /Risk Matrix/);
+});

@@ -27,6 +27,9 @@ KualityForge is in its bootstrap phase. The repository currently contains the fi
 - Advisory per-reviewer scoring written to `scores.json` (deterministic, never blocks the gate).
 - Per-round induced quality-principle candidates written to `induced-principles.{json,md}` (advisory; human decides adoption).
 - Human report generation through `kualityforge report` (Markdown default, `--html` optional) with a fixed F#/G#/P# table template.
+- Dual report mode: `changeset` (7 base sections) and `full-project` (adds project overview, R# reviewer details with sub-scores, risk matrix, action plan, and overall grade).
+- Standalone report generation through `kualityforge report --input <manifest.json>` for external projects that provide a JSON manifest without a full artifact root.
+- Recommended review dimensions table in the template spec, with build/install/deploy script security marked as a mandatory dimension.
 - Review artifact context acknowledgement, context provenance, context gaps, and quality principle violation parsing.
 - Artifact reference validation rejects absolute paths and `..` traversal.
 - Fail-closed reducer behavior for incomplete quality evidence.
@@ -314,13 +317,16 @@ kualityforge record-check --artifact-root <path> --name <name> --status <status>
 kualityforge verify --artifact-root <path> --runner-id <id> --status <status> --input <verify.md>
 kualityforge gate --manifest <path>
 kualityforge gate --artifact-root <path>
-kualityforge report --artifact-root <path> [--out <dir>|--report-out <dir>] [--html]
+kualityforge report --artifact-root <path> [--out <dir>|--report-out <dir>] [--html] [--lang <zh|en>]
+kualityforge report --input <manifest.json> [--html] [--lang <zh|en>] [--output <file>]
 kualityforge kswarm-preview --project-id <id> --run-id <id> --artifact-root <path> --reviewer <runner-id>...
 kualityforge kswarm-run --offline --preview <preview.json> --plan <runtime-plan.json> --review <runner-id=review.md>... --decision <decision.md> --check <name=status> [--verify <verify.md> --verifier-runner-id <id>]
 kualityforge eval [--corpus <dir>] [--report <path>]
 ```
 
-The `report` command renders a human report aggregating the gate result, frozen changeset, findings (F#), consensus findings (G#), advisory reviewer scores, and induced principle candidates (P#). Output directory precedence is the `--out`/`--report-out` flag, then the `KUALITYFORGE_REPORT_OUT_DIR` env var, then the built-in default.
+The `report` command renders a human report aggregating the gate result, frozen changeset, findings (F#), consensus findings (G#), advisory reviewer scores, and induced principle candidates (P#). Two modes are supported: `changeset` (7 base sections for PR/release reviews) and `full-project` (adds project overview, R# reviewer details with sub-dimension scores, risk matrix, action plan, and overall grade for full-codebase audits). Output directory precedence is the `--out`/`--report-out` flag, then the `KUALITYFORGE_REPORT_OUT_DIR` env var, then the built-in default.
+
+The `--input <manifest.json>` form generates a report from a standalone JSON manifest without requiring a full artifact root. The JSON file may include `manifest`, `summaryMarkdown`, `scores`, `inducedPrinciples`, `changeset`, `gate`, `reviewType`, `projectOverview`, `reviewerDetails`, `riskMatrix`, `actionPlan`, and `overallGrade` fields. This is the recommended integration point for external projects that want KualityForge-formatted reports without adopting the full artifact workflow.
 
 Planned public commands:
 

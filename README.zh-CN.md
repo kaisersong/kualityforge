@@ -27,6 +27,9 @@ KualityForge 还在项目启动阶段。当前仓库已经包含第一片 determ
 - 每个 reviewer 的咨询性评分写入 `scores.json`（确定性，不阻断 gate）。
 - 每轮归纳候选质量原则写入 `induced-principles.{json,md}`（咨询；是否纳入由人工决定）。
 - 通过 `kualityforge report` 生成人类可读报告（默认 Markdown，`--html` 可选），采用固定的 F#/G#/P# 表格模板。
+- 双报告模式：`changeset`（7 个基础章节，适用于 PR/release 评审）和 `full-project`（追加项目概览、R# 评审员详细分析含子维度评分、风险矩阵、行动路线和综合评级，适用于全量代码审计）。
+- 通过 `kualityforge report --input <manifest.json>` 从独立 JSON manifest 生成报告，无需完整 artifact root，方便外部项目集成。
+- 模板规范新增推荐评审维度表，其中「构建/安装/部署脚本安全」标记为必选维度。
 - review artifact 支持 context acknowledgement、context provenance、context gaps 和质量原则违背 finding。
 - artifact reference validation 会拒绝绝对路径和 `..` traversal。
 - 对证据不完整的质量运行执行 fail-closed reducer。
@@ -314,13 +317,16 @@ kualityforge record-check --artifact-root <path> --name <name> --status <status>
 kualityforge verify --artifact-root <path> --runner-id <id> --status <status> --input <verify.md>
 kualityforge gate --manifest <path>
 kualityforge gate --artifact-root <path>
-kualityforge report --artifact-root <path> [--out <dir>|--report-out <dir>] [--html]
+kualityforge report --artifact-root <path> [--out <dir>|--report-out <dir>] [--html] [--lang <zh|en>]
+kualityforge report --input <manifest.json> [--html] [--lang <zh|en>] [--output <file>]
 kualityforge kswarm-preview --project-id <id> --run-id <id> --artifact-root <path> --reviewer <runner-id>...
 kualityforge kswarm-run --offline --preview <preview.json> --plan <runtime-plan.json> --review <runner-id=review.md>... --decision <decision.md> --check <name=status> [--verify <verify.md> --verifier-runner-id <id>]
 kualityforge eval [--corpus <dir>] [--report <path>]
 ```
 
-`report` 命令渲染人类可读报告，聚合 gate 结果、冻结变更集、findings（F#）、共识 findings（G#）、咨询性 reviewer 评分与归纳候选原则（P#）。输出目录优先级：`--out`/`--report-out` 参数 → `KUALITYFORGE_REPORT_OUT_DIR` 环境变量 → 内置默认值。
+`report` 命令渲染人类可读报告，聚合 gate 结果、冻结变更集、findings（F#）、共识 findings（G#）、咨询性 reviewer 评分与归纳候选原则（P#）。支持两种模式：`changeset`（7 个基础章节，适用于 PR/release 评审）和 `full-project`（追加项目概览、R# 评审员详细分析含子维度评分、风险矩阵、行动路线和综合评级，适用于全量代码审计）。输出目录优先级：`--out`/`--report-out` 参数 → `KUALITYFORGE_REPORT_OUT_DIR` 环境变量 → 内置默认值。
+
+`--input <manifest.json>` 形式可从独立 JSON manifest 生成报告，无需完整 artifact root。JSON 文件可包含 `manifest`、`summaryMarkdown`、`scores`、`inducedPrinciples`、`changeset`、`gate`、`reviewType`、`projectOverview`、`reviewerDetails`、`riskMatrix`、`actionPlan` 和 `overallGrade` 字段。这是外部项目使用 KualityForge 报告格式的推荐集成方式，无需采纳完整 artifact workflow。
 
 计划中的公开命令：
 
