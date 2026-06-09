@@ -414,6 +414,44 @@ kualityforge review --project /path/to/project \
 
 单个 Agent 运行可以记录为 baseline，但不是完成的 multi-agent gate。只有独立 reviews、synthesis、human decision 和 verification 都闭环，gate 才能通过。
 
+### 通过 xiaok 实现跨 Provider 多模型评审
+
+xiaok 支持 7 个 provider（OpenAI、Anthropic、Kimi、DeepSeek、GLM、MiniMax、Gemini），可以在同一个 session 内并发派发使用不同模型的子 agent。这样每位 reviewer 都运行在真正独立的模型上：
+
+```
+用 kualityforge 评审 /path/to/project，用 gpt-5、claude-sonnet、gemini-2.5-pro、kimi-k2 4 个不同厂商模型，出 HTML 报告
+```
+
+实际执行流程：
+
+```
+1. kualityforge review --project /path --agent gpt5 --agent claude --agent gemini --agent kimi
+   → 分配维度，返回暂存路径
+
+2. 并发派发 4 个 subagent，每个使用不同模型：
+   subagent(model="openai/gpt-5")              → 写 /tmp/reviews/gpt5.md   （安全与性能 + 构建脚本）
+   subagent(model="anthropic/claude-sonnet-4") → 写 /tmp/reviews/claude.md （代码质量与架构）
+   subagent(model="gemini/gemini-2.5-pro")     → 写 /tmp/reviews/gemini.md （UI/UX 与可维护性）
+   subagent(model="kimi/kimi-k2")              → 写 /tmp/reviews/kimi.md   （业务逻辑与迁移完整性）
+
+3. kualityforge review --project /path \
+     --agent gpt5=/tmp/reviews/gpt5.md \
+     --agent claude=/tmp/reviews/claude.md \
+     --agent gemini=/tmp/reviews/gemini.md \
+     --agent kimi=/tmp/reviews/kimi.md \
+     --report --html --lang zh
+```
+
+当评审独立性最重要时，这是最推荐的模式——不同模型家族有不同的训练偏差，GPT-5、Claude、Gemini、Kimi 同时确认的 finding 比同一个模型跑四次的结论更具说服力。
+
+**各 Agent 能力对比：**
+
+| Agent | 跨 provider 子 agent | 支持的 provider |
+|---|---|---|
+| xiaok | ✅ 原生 `subagent` 工具，支持 `model` 参数 | OpenAI、Anthropic、Kimi、DeepSeek、GLM、MiniMax、Gemini |
+| Codex | ✅ `spawn_agent` 支持 `model` 参数 | OpenAI 生态 |
+| Claude Code | ⚠️ `Agent` 工具，仅限 Anthropic 模型 | sonnet / opus / haiku |
+
 ---
 
 ## 文档

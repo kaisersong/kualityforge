@@ -414,6 +414,44 @@ The 5 standard review dimensions are automatically distributed across agents:
 
 A single agent run can be recorded as a baseline, but it is not a completed multi-agent gate. Only when independent reviews, synthesis, human decision, and verification are all present does the gate pass.
 
+### Cross-Provider Multi-Model Review via xiaok
+
+xiaok supports 7 providers (OpenAI, Anthropic, Kimi, DeepSeek, GLM, MiniMax, Gemini) and can dispatch subagents with different models within a single session. This enables a true cross-provider review where each reviewer runs on a genuinely independent model:
+
+```
+用 kualityforge 评审 /path/to/project，用 gpt-5、claude-sonnet、gemini-2.5-pro、kimi-k2 4 个不同厂商模型，出 HTML 报告
+```
+
+Behind the scenes, xiaok uses its `subagent` tool to fan out the review in parallel:
+
+```
+1. kualityforge review --project /path --agent gpt5 --agent claude --agent gemini --agent kimi
+   → assigns dimensions, returns staging paths
+
+2. Dispatch 4 subagents concurrently, each with a different model:
+   subagent(model="openai/gpt-5")              → writes /tmp/reviews/gpt5.md   (security + build)
+   subagent(model="anthropic/claude-sonnet-4") → writes /tmp/reviews/claude.md (code architecture)
+   subagent(model="gemini/gemini-2.5-pro")     → writes /tmp/reviews/gemini.md (UI/UX)
+   subagent(model="kimi/kimi-k2")              → writes /tmp/reviews/kimi.md   (business logic)
+
+3. kualityforge review --project /path \
+     --agent gpt5=/tmp/reviews/gpt5.md \
+     --agent claude=/tmp/reviews/claude.md \
+     --agent gemini=/tmp/reviews/gemini.md \
+     --agent kimi=/tmp/reviews/kimi.md \
+     --report --html --lang zh
+```
+
+This is the recommended pattern when review independence matters most — different model families have different training biases, so a finding confirmed by GPT-5, Claude, Gemini, and Kimi simultaneously carries stronger signal than four runs of the same model.
+
+**Agent capability comparison:**
+
+| Agent | Cross-provider subagents | Supported providers |
+|---|---|---|
+| xiaok | ✅ native `subagent` tool with `model` param | OpenAI, Anthropic, Kimi, DeepSeek, GLM, MiniMax, Gemini |
+| Codex | ✅ `spawn_agent` with `model` param | OpenAI ecosystem |
+| Claude Code | ⚠️ `Agent` tool, Anthropic models only | sonnet / opus / haiku |
+
 ---
 
 ## Documentation
