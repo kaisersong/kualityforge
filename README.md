@@ -10,9 +10,9 @@ A local, auditable quality gate core for projects that need more than a single-a
 
 ## Status
 
-KualityForge is in its bootstrap phase. The repository currently contains the first deterministic gate reducer slice:
+KualityForge provides a complete artifact-first quality gate workflow — from multi-agent review to deterministic gate evaluation and human-readable reports. Currently implemented:
 
-- `manifest.json` / policy schema draft.
+- `manifest.json` / policy schema.
 - `kualityforge init --artifact-root <path> --run-id <id>` CLI entry.
 - `kualityforge gate --manifest <path>` and `kualityforge gate --artifact-root <path>` CLI entries.
 - Review artifact ingestion through `kualityforge write-review`.

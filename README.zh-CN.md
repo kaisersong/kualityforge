@@ -10,9 +10,9 @@
 
 ## 当前状态
 
-KualityForge 还在项目启动阶段。当前仓库已经包含第一片 deterministic gate reducer：
+KualityForge 提供完整的 artifact-first 质量门禁工作流——从多 Agent 评审到确定性门禁判定和人类可读报告。当前已实现：
 
-- `manifest.json` / policy schema 草案。
+- `manifest.json` / policy schema。
 - `kualityforge init --artifact-root <path> --run-id <id>` CLI 入口。
 - `kualityforge gate --manifest <path>` 和 `kualityforge gate --artifact-root <path>` CLI 入口。
 - 通过 `kualityforge write-review` 写入 review artifact。
