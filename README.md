@@ -29,6 +29,7 @@ KualityForge is in its bootstrap phase. The repository currently contains the fi
 - Human report generation through `kualityforge report` (Markdown default, `--html` optional) with a fixed F#/G#/P# table template.
 - Dual report mode: `changeset` (7 base sections) and `full-project` (adds project overview, R# reviewer details with sub-scores, risk matrix, action plan, and overall grade).
 - Standalone report generation through `kualityforge report --input <manifest.json>` for external projects that provide a JSON manifest without a full artifact root.
+- Single-command multi-agent review through `kualityforge review --project <path> --agent <name>...` with dynamic dimension assignment (5 standard review dimensions distributed across agents).
 - Recommended review dimensions table in the template spec, with build/install/deploy script security marked as a mandatory dimension.
 - Review artifact context acknowledgement, context provenance, context gaps, and quality principle violation parsing.
 - Artifact reference validation rejects absolute paths and `..` traversal.
@@ -209,6 +210,7 @@ kualityforge/
       kswarm-workflow.mjs
       kswarm-runtime-executor.mjs
       kswarm-brokered-runtime.mjs
+      review-workflow.mjs
     index.mjs
   schemas/
     manifest.schema.json
@@ -309,6 +311,7 @@ Currently implemented:
 
 ```bash
 kualityforge init --artifact-root <path> --run-id <id> [--profile <name>] [--diff-base <ref>] [--diff-head <ref|WORKTREE>] [--diff-max-patch-bytes <n>]
+kualityforge review --project <path> --agent <name>... [--agent <name=path.md>]... [--report] [--html] [--lang <zh|en>] [--out <dir>] [--run-id <id>] [--profile <name>] [--artifact-root <path>]
 kualityforge run --artifact-root <path> --run-id <id> --review <review.md>... --decision <decision.md> --check <name=status> --verify <verify.md> --verifier-runner-id <id>
 kualityforge write-review --artifact-root <path> --input <review.md>
 kualityforge synthesize --artifact-root <path>
@@ -322,6 +325,28 @@ kualityforge report --input <manifest.json> [--html] [--lang <zh|en>] [--output 
 kualityforge kswarm-preview --project-id <id> --run-id <id> --artifact-root <path> --reviewer <runner-id>...
 kualityforge kswarm-run --offline --preview <preview.json> --plan <runtime-plan.json> --review <runner-id=review.md>... --decision <decision.md> --check <name=status> [--verify <verify.md> --verifier-runner-id <id>]
 kualityforge eval [--corpus <dir>] [--report <path>]
+```
+
+The `review` command is the single-command entry point for multi-agent quality review. It operates in two phases:
+
+- **Plan phase** (`--agent <name>` without `=`): outputs a structured review plan with dimension assignments and staging paths. Each agent is assigned one or more of the 5 standard review dimensions (Security & Performance, Code Quality & Architecture, UI/UX & Maintainability, Business Logic & Migration Integrity, Build/Install/Deploy Scripts), distributed automatically across the named agents.
+- **Run phase** (`--agent <name=path.md>` with `=`): runs the full deterministic workflow — init, ingest reviews, synthesize, gate, and optionally generate report — in one command.
+
+Example plan phase:
+
+```bash
+kualityforge review --project /path/to/project --agent codex --agent claude --agent qoder --agent xiaok
+```
+
+Example run phase (after each agent writes their review to the staging paths):
+
+```bash
+kualityforge review --project /path/to/project \
+  --agent codex=/tmp/reviews/codex.md \
+  --agent claude=/tmp/reviews/claude.md \
+  --agent qoder=/tmp/reviews/qoder.md \
+  --agent xiaok=/tmp/reviews/xiaok.md \
+  --report --html --lang zh --out /path/to/output/
 ```
 
 The `report` command renders a human report aggregating the gate result, frozen changeset, findings (F#), consensus findings (G#), advisory reviewer scores, and induced principle candidates (P#). Two modes are supported: `changeset` (7 base sections for PR/release reviews) and `full-project` (adds project overview, R# reviewer details with sub-dimension scores, risk matrix, action plan, and overall grade for full-codebase audits). Output directory precedence is the `--out`/`--report-out` flag, then the `KUALITYFORGE_REPORT_OUT_DIR` env var, then the built-in default.
@@ -427,6 +452,43 @@ kualityforge kswarm-run --offline \
 ```
 
 `--offline` uses an in-memory KSwarm client and is intended for contract smoke testing. It does not dispatch real agents.
+
+---
+
+## Using KualityForge from xiaok
+
+xiaok can orchestrate a full multi-agent review with a single command:
+
+```
+用 kualityforge 评审 /path/to/project，用 codex、claude、qoder、xiaok 4 个 agent，出 HTML 报告
+```
+
+Behind the scenes, xiaok runs:
+
+```bash
+# Step 1: Plan — get dimension assignments and staging paths
+kualityforge review --project /path/to/project --agent codex --agent claude --agent qoder --agent xiaok
+
+# Step 2: Each agent independently reviews their assigned dimensions and writes markdown to the staging paths
+
+# Step 3: Run — execute the full workflow with all reviews
+kualityforge review --project /path/to/project \
+  --agent codex=/tmp/reviews/codex.md \
+  --agent claude=/tmp/reviews/claude.md \
+  --agent qoder=/tmp/reviews/qoder.md \
+  --agent xiaok=/tmp/reviews/xiaok.md \
+  --report --html --lang zh --out /path/to/output/
+```
+
+The 5 standard review dimensions are automatically distributed across agents:
+
+| Dimension ID | Label (zh) | Label (en) |
+|---|---|---|
+| `security-performance` | 安全与性能 | Security & Performance |
+| `code-architecture` | 代码质量与架构 | Code Quality & Architecture |
+| `ui-ux` | UI/UX 与可维护性 | UI/UX & Maintainability |
+| `business-logic` | 业务逻辑与迁移完整性 | Business Logic & Migration Integrity |
+| `build-scripts` | 构建/安装/部署脚本 | Build/Install/Deploy Scripts |
 
 ---
 

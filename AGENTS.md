@@ -23,16 +23,44 @@
 - core 只负责 artifact protocol、schema、parser、gate reducer、CLI、fixtures、eval corpus 和 CI 可调用的确定性判断。
 - KualityForge 参考 Viking `review-forge` 的多模型 review / synthesize / fix / verify 思路，但不是项目私有 skill；它要成为跨项目可复用、CI / ship 可调用的质量门禁基础设施。
 
+## 关联项目集成联动
+
+- `xiaok-cli` 通过 CLI 调用 KualityForge：
+  - `kualityforge report --input <manifest.json> --html` 生成报告。xiaok 把评审结果序列化为 JSON manifest，调用 KualityForge CLI 输出 HTML，不需要引入 KualityForge 代码。
+  - `kualityforge gate --artifact-root <path>` 判断 gate 结果。xiaok desktop 通过 CLI 获取 exit code 和 JSON 输出。
+  - 修改 KualityForge CLI 接口（命令、flag、输出格式）时，优先检查 xiaok-cli 的调用方是否需要同步。
+- `kswarm` 通过 `kualityforge-flow` contract 集成：
+  - KualityForge 生成 `script_generated` workflow preview 和 runtime plan；KSwarm 消费这些结构执行编排。
+  - 修改 preview / runtime plan schema 时，优先检查 kswarm 的 `kualityforge-flow` template 是否需要同步。
+  - `kswarm-run --offline` 使用 in-memory KSwarm client，只用于 contract smoke；live 集成在 kswarm 侧。
+- `intent-broker` 通过 runner identity 和 event 集成：
+  - runner identity（`codex:gpt-5`、`claude:sonnet`、`xiaok`）同时是 KualityForge manifest 的 reviewer identity 和 intent-broker 的 participant identity。
+  - 修改 runner identity 规则或 verifier independence 判断时，优先检查 intent-broker 的 participant contract。
+- 改 KualityForge 后，至少在 `/Users/song/projects/kualityforge` 跑与改动相关的测试：
+  ```bash
+  npm test
+  ```
+  如果改了 report rendering 或 full-project 模式，还需要：
+  ```bash
+  npm run test:kualityforge:unit
+  ```
+  如果改了 KSwarm preview / runtime plan schema，到 `/Users/song/projects/kswarm` 检查 `kualityforge-flow` template 是否需要同步更新。
+- 只要 KualityForge CLI 接口改动会进入 xiaok desktop 的调用路径，回到 `/Users/song/projects/xiaok-cli` 后还要验证 xiaok 的 KualityForge 调用方不受影响。
+
 ## 当前重心
 
-- 当前重心是 deterministic core：
+- 当前重心是 deterministic core + report rendering：
   - manifest / policy schema。
   - artifact parser。
   - finding reducer。
   - gate reducer。
   - CLI `kualityforge gate`。
+  - report rendering engine（`report.mjs`）：纯渲染，无 IO，只依赖 Node 标准库。
+  - 双报告模式：`changeset`（7 个基础章节）和 `full-project`（追加项目概览、R# 评审员详细分析、风险矩阵、行动路线、综合评级）。
+  - `report --input <manifest.json>` 独立报告生成模式。
   - fixture / golden tests。
   - deterministic eval baseline。
+  - 构建/install/部署脚本安全作为推荐评审维度。
 - 第一阶段不要实现 desktop UI、真实模型 runner、GitHub Actions 发布集成或完整 KSwarm workflow executor。
 - 可以先定义与 KSwarm / intent-broker 对接的 contract，但不要把编排实现塞进 core。
 
@@ -44,6 +72,13 @@
 - 设计文档入口：
   - `docs/README.md`
   - `docs/design/2026-06-01-kualityforge-project-bootstrap-design.md`
+- KSwarm 集成相关改动还要读取：
+  - `docs/design/2026-06-02-kswarm-dynamic-workflow-integration.md`
+  - `docs/design/2026-06-02-kswarm-dynamic-workflow-integration-adversarial-review.md`
+  - `docs/design/2026-06-02-kswarm-runtime-executor-design.md`
+  - `docs/design/2026-06-02-kswarm-runtime-executor-adversarial-review.md`
+- 报告模板规范不在 `docs` symlink 下，随仓库追踪：
+  - `templates/report-template.md`
 - 如果从 `xiaok-cli` 的早期 ReviewForge 设计迁移内容，优先保持语义一致，不要复制 xiaok-cli release profile 作为 core 默认规则。
 
 ## 实现门禁
@@ -63,7 +98,11 @@
   - path validation / artifact root。
   - CI exit code。
   - eval scoring / ground truth corpus。
-- 对抗性评审重点：边界条件、伪造 artifact、path traversal、manifest / markdown drift、未批准 finding 被修复、runner identity 冒用、测试 blocked 被误判通过、live model 波动污染 deterministic gate。
+  - report.mjs 渲染逻辑（纯函数、确定性输出）。
+  - buildReportModel 字段形状变更。
+  - 报告模式变更（changeset vs full-project 新增章节）。
+  - CLI `--input` schema 变更（外部集成依赖此接口稳定）。
+- 对抗性评审重点：边界条件、伪造 artifact、path traversal、manifest / markdown drift、未批准 finding 被修复、runner identity 冒用、测试 blocked 被误判通过、live model 波动污染 deterministic gate、报告渲染输出不一致。
 
 ## 边界
 
@@ -71,6 +110,25 @@
 - `intent-broker`：只放 runner dispatch、event correlation、participant identity 等协作协议。
 - `xiaok-cli`：只放入口、展示、ship/release 集成。
 - `kualityforge`：保持可被任意项目独立调用，不硬编码 xiaok-cli release 规则。
+
+## Report 渲染架构
+
+- `src/core/report.mjs` 是纯渲染模块：不读写文件、不访问网络、不调用模型、只依赖 Node 标准库。
+- 所有渲染通过 `buildReportModel` 构建数据模型，再经 `renderReportMarkdown` / `renderReportHtml` 输出。
+- 双报告模式由 `reviewType` 字段控制：
+  - `changeset`（默认）：7 个基础章节，适用于 PR/release 评审。
+  - `full-project`：追加项目概览、R# 评审员详细分析、风险矩阵、行动路线、综合评级，适用于全量代码审计。
+- 报告结构以 `templates/report-template.md` 为准；`report.mjs` 的渲染输出必须与模板规范一致。
+- 新增用户可见文本必须同时提供 zh/en 双语标签。
+- `buildReportModel` 接受的字段形状变更视为接口变更，需要同步更新 tests 和 template spec。
+
+## 外部集成模式
+
+- `kualityforge report --input <manifest.json>` 是外部项目集成的推荐方式。
+- 外部项目只需提供一份 JSON manifest，KualityForge CLI 生成 HTML/Markdown 报告，无需引入 KualityForge 代码或 artifact workflow。
+- JSON manifest 可包含：`manifest`、`summaryMarkdown`、`scores`、`inducedPrinciples`、`changeset`、`gate`、`reviewType`、`projectOverview`、`reviewerDetails`、`riskMatrix`、`actionPlan`、`overallGrade`。
+- 这个接口需要保持稳定；字段形状变更视为 breaking change。
+- 外部项目如果需要更深集成（artifact workflow、KSwarm 编排），应使用 `kualityforge init` / `gate` / `run` 等 CLI 命令，不走 `--input` 快捷路径。
 
 ## Core 架构规则
 
@@ -82,6 +140,23 @@
 - model-assisted eval 是质量信号，不能替代 deterministic unit / fixture / reducer tests。
 - CI mode 默认不依赖 live model availability；CI gate 消费已生成 artifacts 或 deterministic fixtures。
 - 不把 xiaok-cli 的 release 检查硬编码到 core；项目特定规则通过 policy/profile 注入。
+
+## 跨平台兼容
+
+以下规则适用于 KualityForge CLI 和 report rendering。
+
+- 路径拼接必须用 `path.join` / `path.resolve`，禁止硬编码 `/` 或 `\` 分隔符。
+- 禁止对 `os.homedir()`、config dir、temp dir 的结果做字符串拼接 `/`；一律用 `path.join`。
+- CLI 必须在 macOS、Windows、Linux 上正常工作；artifact path 和 manifest path 处理不能假设 Unix 语义。
+- 文件路径比较和去重必须考虑大小写（Windows 默认 case-insensitive）和盘符（`C:\` vs `/`）。
+- report.mjs 的渲染输出不依赖平台；HTML 报告的 CSS 和字符编码必须跨平台一致。
+- 已知历史教训：artifact reference validation 必须同时拒绝绝对路径和 `..` traversal，不能只检查 Unix 风格。
+
+## Worktrees
+
+- 当前没有 active worktree。
+- 本地验证 `kualityforge` 命令必须使用主工作区 `/Users/song/projects/kualityforge`；不要 `npm link` feature worktree。
+- 如果后续确实需要 worktree，只为隔离实现创建，并在集成后移除。
 
 ## 测试与 Eval
 
@@ -102,12 +177,14 @@
   ```
 - `npm run eval:kualityforge:model-assisted` 只能作为 release 前或 nightly 信号；不要让它成为 PR 必跑的唯一质量证据。
 - 新增 reducer / parser / schema 行为必须先补 fixture 或 unit test。
+- 新增 report rendering 行为必须先补 report.test.mjs。
 - 修复 bug 优先补复现 fixture；不要只改 reducer 让当前 case 通过。
 
 ## 代码风格
 
 - 默认使用 Node.js ESM。
 - 第一阶段尽量使用 Node 标准库，避免过早引入运行时依赖。
+- report.mjs 必须保持纯渲染：不读写文件、不访问网络、只依赖 Node 标准库。IO 操作放在 CLI 层（`src/cli/index.mjs`）或 artifact operations 层（`artifact-operations.mjs`）。
 - 结构化数据优先使用 schema / parser / reducer，不用 ad hoc string matching 作为核心判断。
 - 错误输出要可机器消费；CLI gate 输出 JSON，exit code 表示 gate 结果。
 - 注释只解释不明显的协议或 reducer 决策，不写空泛注释。

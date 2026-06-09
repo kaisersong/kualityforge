@@ -17,6 +17,7 @@ import {
   runKswarmBrokeredRuntimePlan,
   runKswarmRuntimePlan,
   runDeterministicEval,
+  runReviewWorkflow,
   synthesizeArtifactRoot,
   writeReportFromArtifactRoot,
   writeReviewFileToArtifactRoot
@@ -104,6 +105,133 @@ try {
       )
     );
     process.exit(gate.exitCode);
+  }
+
+  if (command === "review") {
+    const projectRoot = readOption(args, "--project");
+    const artifactRoot = readOption(args, "--artifact-root");
+    const runId = readOption(args, "--run-id");
+    const profile = readOption(args, "--profile");
+    const decisionPath = readOption(args, "--decision");
+    const verifyPath = readOption(args, "--verify");
+    const verifierRunnerId = readOption(args, "--verifier-runner-id");
+    const policyPath = readOption(args, "--policy");
+    const outDir = readOption(args, "--out") || readOption(args, "--report-out") || undefined;
+    const hasReport = args.includes("--report");
+    const html = args.includes("--html");
+    const lang = readOption(args, "--lang") || undefined;
+
+    const agentArgs = readOptions(args, "--agent");
+    const reviewerArgs = readOptions(args, "--reviewer");
+    const checkArgs = readOptions(args, "--check");
+
+    if (agentArgs.length === 0 && reviewerArgs.length === 0) {
+      throw new Error("review requires at least one --agent <name> or --agent <name=path>");
+    }
+
+    const { planReview: planReviewFn } = await import("../core/review-workflow.mjs");
+
+    const parsedAgents = parseAgentOptions(agentArgs);
+    const plainAgents = [];
+    const pathAgents = [];
+    for (const { name, path } of parsedAgents) {
+      if (path) {
+        pathAgents.push({ runnerId: name, path });
+      } else {
+        plainAgents.push(name);
+      }
+    }
+
+    const reviewerMap = parseKeyValueOptions(reviewerArgs, "--reviewer");
+    const pathReviewers = [...reviewerMap].map(([runnerId, path]) => ({ runnerId, path }));
+
+    const allPathReviewers = [...pathAgents, ...pathReviewers];
+
+    if (plainAgents.length > 0 && allPathReviewers.length === 0) {
+      const resolvedRunId = runId || `review-${Date.now()}`;
+      const stagingDir = artifactRoot
+        ? join(artifactRoot, "staging")
+        : projectRoot
+          ? join(projectRoot, "docs", "quality", resolvedRunId, "staging")
+          : join("/tmp", `kualityforge-staging-${resolvedRunId}`);
+      const plan = planReviewFn(plainAgents, { projectRoot, lang: lang || undefined });
+      const assignments = plan.assignments.map((a) => ({
+        agent: a.agent,
+        dimensions: a.dimensions,
+        reviewPath: join(stagingDir, `${a.agent}.md`)
+      }));
+      const nextCommand = [
+        "kualityforge review",
+        projectRoot ? `--project ${projectRoot}` : `--artifact-root ${artifactRoot}`,
+        ...assignments.map((a) => `--agent ${a.agent}=${a.reviewPath}`),
+        ...(reviewerArgs.length > 0 ? reviewerArgs.map((r) => `--reviewer ${r}`) : []),
+        ...(decisionPath ? [`--decision ${decisionPath}`] : []),
+        ...(checkArgs.length > 0 ? checkArgs.map((c) => `--check ${c}`) : []),
+        ...(verifyPath ? [`--verify ${verifyPath}`] : []),
+        ...(verifierRunnerId ? [`--verifier-runner-id ${verifierRunnerId}`] : []),
+        ...(hasReport ? ["--report"] : []),
+        ...(html ? ["--html"] : []),
+        ...(lang ? [`--lang ${lang}`] : []),
+        ...(outDir ? [`--out ${outDir}`] : [])
+      ].join(" \\\n  ");
+
+      console.log(
+        JSON.stringify(
+          {
+            status: "plan_created",
+            stagingDir,
+            runId: resolvedRunId,
+            assignments,
+            nextCommand
+          },
+          null,
+          2
+        )
+      );
+      process.exit(0);
+    }
+
+    if (allPathReviewers.length === 0) {
+      throw new Error("review requires at least one --agent <name=path> or --reviewer <runnerId=path> to run the workflow");
+    }
+
+    const checks = checkArgs.map(parseCheckOption);
+
+    if (verifyPath && !verifierRunnerId) {
+      throw new Error("review requires --verifier-runner-id <id> when --verify is provided");
+    }
+
+    const result = await runReviewWorkflow({
+      projectRoot,
+      artifactRoot,
+      runId,
+      profile,
+      reviewers: allPathReviewers,
+      decisionPath,
+      checks,
+      verifyPath,
+      verifierRunnerId,
+      report: hasReport,
+      html,
+      lang,
+      outDir,
+      policyPath
+    });
+
+    console.log(
+      JSON.stringify(
+        {
+          status: result.gate.status,
+          artifactRoot: result.artifactRoot,
+          runId: result.runId,
+          gate: result.gate,
+          ...(result.report ? { report: result.report } : {})
+        },
+        null,
+        2
+      )
+    );
+    process.exit(result.gate.exitCode);
   }
 
   if (command === "gate") {
@@ -531,6 +659,19 @@ function parseCheckOption(value) {
   };
 }
 
+function parseAgentOptions(values) {
+  const result = [];
+  for (const value of values) {
+    const separator = value.indexOf("=");
+    if (separator === -1) {
+      result.push({ name: value, path: null });
+    } else {
+      result.push({ name: value.slice(0, separator), path: value.slice(separator + 1) });
+    }
+  }
+  return result;
+}
+
 function parseKeyValueOptions(values, name) {
   const result = new Map();
   for (const value of values) {
@@ -585,6 +726,7 @@ function printHelp() {
 Usage:
   kualityforge init --artifact-root <path> --run-id <id> [--profile <name>] [--project-root <path>] [--docs-root <path>] [--quality-principles <json>] [--change-goal <text>] [--instruction <path>] [--design-entrypoint <path>] [--diff-base <ref>] [--diff-head <ref|WORKTREE>] [--diff-max-patch-bytes <n>]
   kualityforge run --artifact-root <path> --run-id <id> --review <review.md>... --decision <decision.md> --check <name=status> --verify <verify.md> --verifier-runner-id <id> [--project-root <path>] [--docs-root <path>] [--quality-principles <json>] [--change-goal <text>]
+  kualityforge review --project <path> --agent <name>... [--agent <name=path.md>]... [--report] [--html] [--lang <zh|en>] [--out <dir>]
   kualityforge write-review --artifact-root <path> --input <review.md>
   kualityforge synthesize --artifact-root <path>
   kualityforge decide --artifact-root <path> --input <decision.md>

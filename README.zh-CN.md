@@ -29,6 +29,7 @@ KualityForge 还在项目启动阶段。当前仓库已经包含第一片 determ
 - 通过 `kualityforge report` 生成人类可读报告（默认 Markdown，`--html` 可选），采用固定的 F#/G#/P# 表格模板。
 - 双报告模式：`changeset`（7 个基础章节，适用于 PR/release 评审）和 `full-project`（追加项目概览、R# 评审员详细分析含子维度评分、风险矩阵、行动路线和综合评级，适用于全量代码审计）。
 - 通过 `kualityforge report --input <manifest.json>` 从独立 JSON manifest 生成报告，无需完整 artifact root，方便外部项目集成。
+- 通过 `kualityforge review --project <path> --agent <name>...` 单命令执行多 Agent 评审，自动分配 5 个标准评审维度。
 - 模板规范新增推荐评审维度表，其中「构建/安装/部署脚本安全」标记为必选维度。
 - review artifact 支持 context acknowledgement、context provenance、context gaps 和质量原则违背 finding。
 - artifact reference validation 会拒绝绝对路径和 `..` traversal。
@@ -209,6 +210,7 @@ kualityforge/
       kswarm-workflow.mjs
       kswarm-runtime-executor.mjs
       kswarm-brokered-runtime.mjs
+      review-workflow.mjs
     index.mjs
   schemas/
     manifest.schema.json
@@ -309,6 +311,7 @@ kualityforge gate --manifest path/to/manifest.json
 
 ```bash
 kualityforge init --artifact-root <path> --run-id <id> [--profile <name>] [--diff-base <ref>] [--diff-head <ref|WORKTREE>] [--diff-max-patch-bytes <n>]
+kualityforge review --project <path> --agent <name>... [--agent <name=path.md>]... [--report] [--html] [--lang <zh|en>] [--out <dir>] [--run-id <id>] [--profile <name>] [--artifact-root <path>]
 kualityforge run --artifact-root <path> --run-id <id> --review <review.md>... --decision <decision.md> --check <name=status> --verify <verify.md> --verifier-runner-id <id>
 kualityforge write-review --artifact-root <path> --input <review.md>
 kualityforge synthesize --artifact-root <path>
@@ -322,6 +325,28 @@ kualityforge report --input <manifest.json> [--html] [--lang <zh|en>] [--output 
 kualityforge kswarm-preview --project-id <id> --run-id <id> --artifact-root <path> --reviewer <runner-id>...
 kualityforge kswarm-run --offline --preview <preview.json> --plan <runtime-plan.json> --review <runner-id=review.md>... --decision <decision.md> --check <name=status> [--verify <verify.md> --verifier-runner-id <id>]
 kualityforge eval [--corpus <dir>] [--report <path>]
+```
+
+`review` 命令是多 Agent 质量评审的单命令入口，支持两个阶段：
+
+- **规划阶段**（`--agent <name>` 不带 `=`）：输出结构化评审计划，包含维度分配和暂存路径。5 个标准评审维度（安全与性能、代码质量与架构、UI/UX 与可维护性、业务逻辑与迁移完整性、构建/安装/部署脚本）自动分配给各 Agent。
+- **执行阶段**（`--agent <name=path.md>` 带 `=`）：一次性运行完整的确定性工作流——初始化、导入评审、综合、门禁判定，可选生成报告。
+
+规划阶段示例：
+
+```bash
+kualityforge review --project /path/to/project --agent codex --agent claude --agent qoder --agent xiaok
+```
+
+执行阶段示例（各 Agent 将评审写到暂存路径后）：
+
+```bash
+kualityforge review --project /path/to/project \
+  --agent codex=/tmp/reviews/codex.md \
+  --agent claude=/tmp/reviews/claude.md \
+  --agent qoder=/tmp/reviews/qoder.md \
+  --agent xiaok=/tmp/reviews/xiaok.md \
+  --report --html --lang zh --out /path/to/output/
 ```
 
 `report` 命令渲染人类可读报告，聚合 gate 结果、冻结变更集、findings（F#）、共识 findings（G#）、咨询性 reviewer 评分与归纳候选原则（P#）。支持两种模式：`changeset`（7 个基础章节，适用于 PR/release 评审）和 `full-project`（追加项目概览、R# 评审员详细分析含子维度评分、风险矩阵、行动路线和综合评级，适用于全量代码审计）。输出目录优先级：`--out`/`--report-out` 参数 → `KUALITYFORGE_REPORT_OUT_DIR` 环境变量 → 内置默认值。
@@ -427,6 +452,43 @@ kualityforge kswarm-run --offline \
 ```
 
 `--offline` 使用 in-memory KSwarm client，只用于 contract smoke，不会派发真实 agent。
+
+---
+
+## 从 xiaok 中调用
+
+xiaok 可以用一条命令编排完整的多 Agent 评审：
+
+```
+用 kualityforge 评审 /path/to/project，用 codex、claude、qoder、xiaok 4 个 agent，出 HTML 报告
+```
+
+实际执行分为三步：
+
+```bash
+# 第 1 步：规划——获取维度分配和暂存路径
+kualityforge review --project /path/to/project --agent codex --agent claude --agent qoder --agent xiaok
+
+# 第 2 步：各 Agent 独立评审被分配的维度，把 markdown 写到暂存路径
+
+# 第 3 步：执行——用所有评审运行完整工作流
+kualityforge review --project /path/to/project \
+  --agent codex=/tmp/reviews/codex.md \
+  --agent claude=/tmp/reviews/claude.md \
+  --agent qoder=/tmp/reviews/qoder.md \
+  --agent xiaok=/tmp/reviews/xiaok.md \
+  --report --html --lang zh --out /path/to/output/
+```
+
+5 个标准评审维度自动分配给各 Agent：
+
+| 维度 ID | 中文标签 | 英文标签 |
+|---|---|---|
+| `security-performance` | 安全与性能 | Security & Performance |
+| `code-architecture` | 代码质量与架构 | Code Quality & Architecture |
+| `ui-ux` | UI/UX 与可维护性 | UI/UX & Maintainability |
+| `business-logic` | 业务逻辑与迁移完整性 | Business Logic & Migration Integrity |
+| `build-scripts` | 构建/安装/部署脚本 | Build/Install/Deploy Scripts |
 
 ---
 

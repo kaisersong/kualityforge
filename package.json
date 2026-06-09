@@ -1,6 +1,6 @@
 {
   "name": "kualityforge",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "KualityForge quality gate protocol, reducer, CLI, tests, and eval baseline.",
   "type": "module",

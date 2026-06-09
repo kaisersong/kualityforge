@@ -60,3 +60,4 @@ export {
   runKswarmBrokeredRuntimePlan
 } from "./core/kswarm-brokered-runtime.mjs";
 export { createKswarmHttpClient, KswarmHttpError } from "./core/kswarm-http-client.mjs";
+export { REVIEW_DIMENSIONS, assignDimensions, planReview, runReviewWorkflow } from "./core/review-workflow.mjs";
