@@ -377,93 +377,15 @@ npm run eval:kualityforge
 
 ---
 
-## 从 Codex 中调用
+## 多 Agent 评审
 
-今天 Codex 可以直接调用 deterministic gate：
-
-```bash
-node /Users/song/projects/kualityforge/src/cli/index.mjs gate \
-  --manifest docs/quality/<run-id>/manifest.json
-```
-
-长期目标形态是：
-
-```bash
-kualityforge run \
-  --target . \
-  --artifact-root docs/quality/<run-id> \
-  --profile release \
-  --workflow kswarm
-```
-
-Codex 不能在只有单 runner 的情况下宣称完整 KualityForge gate passed。只有独立 reviews、synthesis、human decision、approved-only fix、required checks 和 independent verification 都闭环，才能算完整 gate。
-
-单次 Codex 运行可以记录为 baseline，但不是完成的 multi-agent gate。
-
-如果本地 artifacts 已经存在，Codex 今天可以直接跑 deterministic local workflow：
-
-```bash
-kualityforge run \
-  --artifact-root docs/quality/<run-id> \
-  --run-id <run-id> \
-  --profile release \
-  --review codex-review.md \
-  --review claude-review.md \
-  --decision decision.md \
-  --check "npm test=passed" \
-  --verify verify.md \
-  --verifier-runner-id claude:verifier
-```
-
-要把编排交给 KSwarm dynamic workflow，Codex 可以先生成 script preview 和 runtime plan：
-
-```bash
-kualityforge kswarm-preview \
-  --project-id <kswarm-project-id> \
-  --run-id <run-id> \
-  --artifact-root docs/quality/<run-id> \
-  --reviewer codex:gpt-5 \
-  --reviewer claude:sonnet \
-  --project-root /path/to/project \
-  --docs-root /path/to/project/docs \
-  --quality-principles /path/to/quality-principles.json \
-  --change-goal "按声明的质量 profile 评审本次 release"
-```
-
-输出包含：
-
-- `preview`：KSwarm `script_generated` workflow preview，包含稳定的 `scriptHash`、phases、scope 和 fan-out analysis。
-- `runtimePlan`：给外部 runtime 使用的 KualityForge 执行计划。它说明如何初始化 artifacts、启动 KSwarm parallel reviewer group、派发 reviewer node、写入 review artifact、synthesize、verify、运行 deterministic gate，并把 gate result 映射回 KSwarm terminal status。
-
-runtime plan 本身不是 gate evidence。reviewer node output 仍然必须写成 KualityForge review artifact，并登记到 `manifest.json`。
-
-如果只想在本地验证 runtime executor，不连接真实 KSwarm service：
-
-```bash
-kualityforge kswarm-run --offline \
-  --preview preview.json \
-  --plan runtime-plan.json \
-  --review codex:gpt-5=codex-review.md \
-  --review claude:sonnet=claude-review.md \
-  --decision decision.md \
-  --check "npm test=passed" \
-  --verify verify.md \
-  --verifier-runner-id claude:verifier
-```
-
-`--offline` 使用 in-memory KSwarm client，只用于 contract smoke，不会派发真实 agent。
-
----
-
-## 从 xiaok 中调用
-
-xiaok 可以用一条命令编排完整的多 Agent 评审：
+任意 Agent（Codex、Claude Code、Qoder、xiaok 等）都可以用一条命令编排完整的多 Agent 评审：
 
 ```
 用 kualityforge 评审 /path/to/project，用 codex、claude、qoder、xiaok 4 个 agent，出 HTML 报告
 ```
 
-实际执行分为三步：
+实际执行分为两步：
 
 ```bash
 # 第 1 步：规划——获取维度分配和暂存路径
@@ -489,6 +411,8 @@ kualityforge review --project /path/to/project \
 | `ui-ux` | UI/UX 与可维护性 | UI/UX & Maintainability |
 | `business-logic` | 业务逻辑与迁移完整性 | Business Logic & Migration Integrity |
 | `build-scripts` | 构建/安装/部署脚本 | Build/Install/Deploy Scripts |
+
+单个 Agent 运行可以记录为 baseline，但不是完成的 multi-agent gate。只有独立 reviews、synthesis、human decision 和 verification 都闭环，gate 才能通过。
 
 ---
 

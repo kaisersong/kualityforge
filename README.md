@@ -377,93 +377,15 @@ npm run eval:kualityforge
 
 ---
 
-## Using KualityForge from Codex
+## Multi-Agent Review
 
-Today, Codex can call the deterministic gate directly:
-
-```bash
-node /Users/song/projects/kualityforge/src/cli/index.mjs gate \
-  --manifest docs/quality/<run-id>/manifest.json
-```
-
-The long-term shape is:
-
-```bash
-kualityforge run \
-  --target . \
-  --artifact-root docs/quality/<run-id> \
-  --profile release \
-  --workflow kswarm
-```
-
-Codex should not claim a full KualityForge gate pass unless the multi-agent artifact chain is complete: independent reviews, synthesis, human decision, approved-only fix, required checks, and independent verification.
-
-A single Codex run can be recorded as a baseline, but it is not a completed multi-agent gate.
-
-For local artifacts that already exist, Codex can run a deterministic local workflow today:
-
-```bash
-kualityforge run \
-  --artifact-root docs/quality/<run-id> \
-  --run-id <run-id> \
-  --profile release \
-  --review codex-review.md \
-  --review claude-review.md \
-  --decision decision.md \
-  --check "npm test=passed" \
-  --verify verify.md \
-  --verifier-runner-id claude:verifier
-```
-
-To hand off orchestration to KSwarm dynamic workflow, Codex can first generate a script preview and runtime plan:
-
-```bash
-kualityforge kswarm-preview \
-  --project-id <kswarm-project-id> \
-  --run-id <run-id> \
-  --artifact-root docs/quality/<run-id> \
-  --reviewer codex:gpt-5 \
-  --reviewer claude:sonnet \
-  --project-root /path/to/project \
-  --docs-root /path/to/project/docs \
-  --quality-principles /path/to/quality-principles.json \
-  --change-goal "Review this release against the declared quality profile"
-```
-
-The output contains:
-
-- `preview`: the KSwarm `script_generated` workflow preview, including stable `scriptHash`, phases, scope, and fan-out analysis.
-- `runtimePlan`: the KualityForge execution plan for the external runtime. It tells the runtime how to initialize artifacts, begin the KSwarm parallel reviewer group, dispatch reviewer nodes, write review artifacts, synthesize, verify, run the deterministic gate, and map the gate result back to KSwarm terminal status.
-
-The runtime plan is not gate evidence by itself. Reviewer node output must still be written as KualityForge review artifacts and registered in `manifest.json`.
-
-For a local smoke run against the runtime executor without connecting to a live KSwarm service:
-
-```bash
-kualityforge kswarm-run --offline \
-  --preview preview.json \
-  --plan runtime-plan.json \
-  --review codex:gpt-5=codex-review.md \
-  --review claude:sonnet=claude-review.md \
-  --decision decision.md \
-  --check "npm test=passed" \
-  --verify verify.md \
-  --verifier-runner-id claude:verifier
-```
-
-`--offline` uses an in-memory KSwarm client and is intended for contract smoke testing. It does not dispatch real agents.
-
----
-
-## Using KualityForge from xiaok
-
-xiaok can orchestrate a full multi-agent review with a single command:
+Any agent (Codex, Claude Code, Qoder, xiaok, etc.) can orchestrate a full multi-agent review with a single command:
 
 ```
 用 kualityforge 评审 /path/to/project，用 codex、claude、qoder、xiaok 4 个 agent，出 HTML 报告
 ```
 
-Behind the scenes, xiaok runs:
+This runs in two steps:
 
 ```bash
 # Step 1: Plan — get dimension assignments and staging paths
@@ -489,6 +411,8 @@ The 5 standard review dimensions are automatically distributed across agents:
 | `ui-ux` | UI/UX 与可维护性 | UI/UX & Maintainability |
 | `business-logic` | 业务逻辑与迁移完整性 | Business Logic & Migration Integrity |
 | `build-scripts` | 构建/安装/部署脚本 | Build/Install/Deploy Scripts |
+
+A single agent run can be recorded as a baseline, but it is not a completed multi-agent gate. Only when independent reviews, synthesis, human decision, and verification are all present does the gate pass.
 
 ---
 
