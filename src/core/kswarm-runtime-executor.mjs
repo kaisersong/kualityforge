@@ -120,7 +120,9 @@ export async function runKswarmRuntimePlan(options = {}) {
       reviewerRole: role,
       quorumMember,
       required: isRequired,
-      lang: options.lang
+      lang: options.lang,
+      reviewType: runtimePlan.reviewType || null,
+      hasStructureScan: Boolean(runtimePlan.enableStructureScan)
     });
     const dispatched = await expectOk(
       "dispatchWorkflowScriptAgentNode",
@@ -173,6 +175,20 @@ export async function runKswarmRuntimePlan(options = {}) {
       expectedRunnerId: reviewer.runnerId,
       artifact: reviewer.outputArtifact
     });
+    if (artifact.isVacuous) {
+      if (!reviewPolicy || isRequired) {
+        throw new Error(`required reviewer ${reviewer.runnerId} produced vacuous output (no substantive findings)`);
+      }
+      reviewOutcomes.push({
+        runnerId: reviewer.runnerId,
+        role,
+        quorumMember,
+        nodeId: dispatched.nodeId,
+        status: "skipped",
+        absenceReason: "reviewer produced vacuous output (no substantive findings)"
+      });
+      continue;
+    }
     const dispatchInfo = firstDispatch(dispatched);
     const nodeResult = await expectOk(
       "recordWorkflowNodeResult",
@@ -355,7 +371,9 @@ function createContextOptions(runtimePlan) {
     docsRoots: runtimePlan.docsRoots || [],
     qualityPrinciplesPath: runtimePlan.qualityPrinciplesPath,
     changeGoal: runtimePlan.changeGoal,
-    ...(runtimePlan.changeset ? { changeset: runtimePlan.changeset } : {})
+    ...(runtimePlan.changeset ? { changeset: runtimePlan.changeset } : {}),
+    enableStructureScan: true,
+    ...(runtimePlan.reviewType ? { reviewType: runtimePlan.reviewType } : {})
   };
 }
 

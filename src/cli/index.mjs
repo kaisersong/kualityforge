@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
 import { readFile, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, resolve, basename, dirname } from "node:path";
+import { homedir } from "node:os";
 import {
   createKswarmHttpClient,
   createOfflineKswarmClient,
@@ -257,23 +258,47 @@ try {
   }
 
   if (command === "kswarm-preview") {
-    const projectId = requireOption(args, "--project-id", "kswarm-preview");
-    const runId = requireOption(args, "--run-id", "kswarm-preview");
-    const artifactRoot = requireOption(args, "--artifact-root", "kswarm-preview");
-    const reviewers = readOptions(args, "--reviewer");
+    const context = readContextOptions(args) || {};
+    const projectRoot = context.projectRoot || readOption(args, "--project-root") || null;
+
+    const projectId = readOption(args, "--project-id") ||
+      (projectRoot ? basename(resolve(projectRoot)) : basename(process.cwd()));
+
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const runId = readOption(args, "--run-id") || `${projectId}-${today}`;
+
+    const defaultArtifactRoot = join(homedir(), "projects", "mydocs", projectId, "quality", runId);
+    const artifactRoot = readOption(args, "--artifact-root") || defaultArtifactRoot;
+
+    const reviewerArgs = readOptions(args, "--reviewer");
     const advisoryReviewers = readOptions(args, "--advisory-reviewer");
     const quorumMinText = readOption(args, "--quorum-min");
-    const context = readContextOptions(args) || {};
     const target = readOption(args, "--target") || ".";
     const requestedBy = readOption(args, "--requested-by");
     const createdAtText = readOption(args, "--created-at");
     const createdAt = createdAtText ? Number(createdAtText) : undefined;
 
+    let reviewers = reviewerArgs.map(normalizeReviewerShortName);
+
     if (reviewers.length === 0) {
-      throw new Error("kswarm-preview requires at least one --reviewer <runner-id>");
+      const kswarmUrl = readOption(args, "--kswarm-url") || process.env.KSWARM_URL;
+      if (kswarmUrl) {
+        const discoveredReviewers = await discoverOnlineReviewers(kswarmUrl);
+        if (discoveredReviewers.length === 0) {
+          throw new Error(
+            "No online reviewers found in KSwarm. Start at least one agent (codex, claude, qoder, xiaok) or pass --reviewer <name> explicitly."
+          );
+        }
+        reviewers = discoveredReviewers;
+        process.stderr.write(`Auto-selected reviewers from KSwarm: ${reviewers.join(", ")}\n`);
+      } else {
+        throw new Error(
+          "kswarm-preview requires at least one --reviewer <name> (e.g. codex, claude, qoder, xiaok), or set KSWARM_URL to auto-discover online agents."
+        );
+      }
     }
 
-    const reviewPolicy = buildReviewPolicy(reviewers, advisoryReviewers, quorumMinText);
+    const reviewPolicy = buildReviewPolicy(reviewers, advisoryReviewers.map(normalizeReviewerShortName), quorumMinText);
     const dispatchedReviewers = reviewPolicy
       ? [...reviewPolicy.requiredReviewers, ...reviewPolicy.advisoryReviewers]
       : reviewers;
@@ -294,15 +319,19 @@ try {
     if (reviewPolicy) {
       output.reviewPolicy = reviewPolicy;
     }
+    process.stderr.write(`Project:       ${projectId}\n`);
+    process.stderr.write(`Run ID:        ${runId}\n`);
+    process.stderr.write(`Artifact root: ${artifactRoot}\n`);
+    process.stderr.write(`Reviewers:     ${dispatchedReviewers.join(", ")}\n`);
     console.log(JSON.stringify(output, null, 2));
     process.exit(0);
   }
 
   if (command === "kswarm-run") {
     const mode = resolveKswarmRunMode(args);
-    const previewPath = requireOption(args, "--preview", "kswarm-run");
-    const planPath = requireOption(args, "--plan", "kswarm-run");
-    const decisionPath = requireOption(args, "--decision", "kswarm-run");
+    const previewPath = readOption(args, "--preview");
+    const planPath = readOption(args, "--plan");
+    const decisionPath = readOption(args, "--decision");
     const checks = readOptions(args, "--check").map(parseCheckOption);
     const verifyPath = readOption(args, "--verify");
     const verifierRunnerId = readOption(args, "--verifier-runner-id");
@@ -311,8 +340,66 @@ try {
       throw new Error("kswarm-run requires --verifier-runner-id <id> when --verify is provided");
     }
 
-    const preview = JSON.parse(await readFile(previewPath, "utf8"));
-    const runtimePlan = JSON.parse(await readFile(planPath, "utf8"));
+    let preview, runtimePlan;
+
+    if (previewPath && planPath) {
+      preview = JSON.parse(await readFile(previewPath, "utf8"));
+      runtimePlan = JSON.parse(await readFile(planPath, "utf8"));
+    } else if (!previewPath && !planPath) {
+      if (mode !== "brokered") {
+        throw new Error("kswarm-run --offline requires --preview <preview.json> and --plan <runtime-plan.json>");
+      }
+      const context = readContextOptions(args) || {};
+      const projectRoot = context.projectRoot || readOption(args, "--project-root") || null;
+      const projectId = readOption(args, "--project-id") ||
+        (projectRoot ? basename(resolve(projectRoot)) : basename(process.cwd()));
+      const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+      const runId = readOption(args, "--run-id") || `${projectId}-${today}`;
+      const defaultArtifactRoot = join(homedir(), "projects", "mydocs", projectId, "quality", runId);
+      const artifactRoot = readOption(args, "--artifact-root") || defaultArtifactRoot;
+
+      const reviewerArgs = readOptions(args, "--reviewer");
+      let reviewers = reviewerArgs.map(normalizeReviewerShortName);
+      if (reviewers.length === 0) {
+        const kswarmUrl = readOption(args, "--kswarm-url") || process.env.KSWARM_URL;
+        if (kswarmUrl) {
+          const discovered = await discoverOnlineReviewers(kswarmUrl);
+          if (discovered.length === 0) {
+            throw new Error("No online reviewers found in KSwarm. Start agents or pass --reviewer <name>.");
+          }
+          reviewers = discovered;
+          process.stderr.write(`Auto-selected reviewers: ${reviewers.join(", ")}\n`);
+        } else {
+          throw new Error("kswarm-run requires --reviewer <name> or KSWARM_URL to auto-discover agents.");
+        }
+      }
+
+      const advisoryReviewers = readOptions(args, "--advisory-reviewer").map(normalizeReviewerShortName);
+      const quorumMinText = readOption(args, "--quorum-min");
+      const reviewPolicy = buildReviewPolicy(reviewers, advisoryReviewers, quorumMinText);
+      const dispatchedReviewers = reviewPolicy
+        ? [...reviewPolicy.requiredReviewers, ...reviewPolicy.advisoryReviewers]
+        : reviewers;
+
+      const workflowOptions = {
+        projectId,
+        runId,
+        artifactRoot,
+        reviewers: dispatchedReviewers,
+        target: readOption(args, "--target") || ".",
+        requestedBy: readOption(args, "--requested-by"),
+        ...context
+      };
+      preview = createKswarmScriptPreview(workflowOptions);
+      runtimePlan = createKswarmRuntimePlan(workflowOptions);
+
+      process.stderr.write(`Project:       ${projectId}\n`);
+      process.stderr.write(`Run ID:        ${runId}\n`);
+      process.stderr.write(`Artifact root: ${artifactRoot}\n`);
+      process.stderr.write(`Reviewers:     ${dispatchedReviewers.join(", ")}\n`);
+    } else {
+      throw new Error("kswarm-run: provide both --preview and --plan, or neither (inline mode).");
+    }
 
     const advisoryReviewers = readOptions(args, "--advisory-reviewer");
     const quorumMinText = readOption(args, "--quorum-min");
@@ -325,7 +412,9 @@ try {
     const policy = reviewPolicy ? { review: reviewPolicy } : undefined;
 
     const sharedProviders = {
-      decisionProvider: async () => readFile(decisionPath, "utf8"),
+      decisionProvider: decisionPath
+        ? async () => readFile(decisionPath, "utf8")
+        : undefined,
       checkRunner: async () => checks,
       verifierRunner: verifyPath
         ? async () => ({
@@ -340,7 +429,9 @@ try {
       if (readOptions(args, "--review").length > 0) {
         throw new Error("--review runner=file.md is only valid in offline mode; brokered reviewers write artifacts via KSwarm");
       }
-      const kswarmUrl = requireOption(args, "--kswarm-url", "kswarm-run --mode brokered");
+      const kswarmUrl = readOption(args, "--kswarm-url") || process.env.KSWARM_URL || (() => {
+        throw new Error("kswarm-run --mode brokered requires --kswarm-url <url> or KSWARM_URL env var");
+      })();
       const pollIntervalMs = Number(readOption(args, "--poll-interval-ms")) || undefined;
       const timeoutMs = Number(readOption(args, "--timeout-ms")) || undefined;
       const kswarmClient = createKswarmHttpClient({ baseUrl: kswarmUrl });
@@ -355,10 +446,16 @@ try {
         ...sharedProviders
       });
 
-      const brokeredReport = args.includes("--report")
+      const noReport = args.includes("--no-report");
+      const wantHtml = !args.includes("--no-html");
+      const explicitReportOut = readOption(args, "--report-out");
+      const defaultReportOut = dirname(runtimePlan.artifactRoot);
+      const reportOutDir = explicitReportOut || defaultReportOut;
+
+      const brokeredReport = !noReport
         ? await writeReportFromArtifactRoot(runtimePlan.artifactRoot, {
-            outDir: readOption(args, "--report-out") || undefined,
-            html: args.includes("--html"),
+            outDir: reportOutDir,
+            html: wantHtml,
             lang: readOption(args, "--lang") || undefined,
             gate: result.gate
           })
@@ -547,6 +644,77 @@ try {
     process.exit(result.status === "passed" ? 0 : 1);
   }
 
+  if (command === "list-agents") {
+    const kswarmUrl = readOption(args, "--kswarm-url") || process.env.KSWARM_URL || (() => {
+      throw new Error("list-agents requires --kswarm-url <url> or KSWARM_URL env var");
+    })();
+    const client = createKswarmHttpClient({ baseUrl: kswarmUrl });
+
+    const [agentsResult, livenessResult, participantsResult] = await Promise.allSettled([
+      client.listAgents(),
+      client.listAgentsLiveness(),
+      client.listParticipants()
+    ]);
+
+    const agents = agentsResult.status === "fulfilled" ? (agentsResult.value.agents || []) : [];
+    const liveness = livenessResult.status === "fulfilled" ? (livenessResult.value.liveness || {}) : {};
+    const participants = participantsResult.status === "fulfilled"
+      ? (participantsResult.value.participants || participantsResult.value || [])
+      : [];
+    const participantIds = new Set(participants.map((p) => p.participantId || p.id).filter(Boolean));
+
+    if (args.includes("--json")) {
+      console.log(JSON.stringify({ agents, liveness, participants }, null, 2));
+      process.exit(0);
+    }
+
+    if (agents.length === 0 && participants.length === 0) {
+      console.log("No agents or participants found.");
+      process.exit(0);
+    }
+
+    const col = (s, w) => String(s ?? "").padEnd(w).slice(0, w);
+    const header = `${"ID".padEnd(28)}  ${"NAME".padEnd(24)}  ${"RUNTIME TYPE".padEnd(18)}  ${"ONLINE".padEnd(7)}  PARTICIPANT`;
+    const sep = "-".repeat(header.length);
+    console.log(header);
+    console.log(sep);
+
+    for (const agent of agents) {
+      const live = liveness[agent.id] || {};
+      const online = live.online ? "yes" : (live.lastSeen ? "no" : "—");
+      const isParticipant = participantIds.has(agent.id) ? "broker" : "";
+      console.log(
+        `${col(agent.id, 28)}  ${col(agent.name, 24)}  ${col(agent.runtimeType || agent.type || "", 18)}  ${col(online, 7)}  ${isParticipant}`
+      );
+    }
+
+    if (participants.length > 0) {
+      const knownAgentIds = new Set(agents.map((a) => a.id));
+      const brokerOnly = participants.filter((p) => {
+        const id = p.participantId || p.id;
+        return id && !knownAgentIds.has(id);
+      });
+      if (brokerOnly.length > 0) {
+        console.log("");
+        console.log("Broker-only participants (not in agent store):");
+        for (const p of brokerOnly) {
+          const id = p.participantId || p.id || "?";
+          const name = p.name || p.participantId || "";
+          console.log(`  ${col(id, 28)}  ${name}`);
+        }
+      }
+    }
+
+    if (agentsResult.status === "rejected") {
+      console.error(`\nWarning: could not fetch agents: ${agentsResult.reason?.message}`);
+    }
+    if (participantsResult.status === "rejected") {
+      console.error(`Warning: could not fetch participants (broker may be offline): ${participantsResult.reason?.message}`);
+    }
+
+    process.exit(0);
+  }
+
   throw new Error(`unknown command: ${command}`);
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
@@ -583,6 +751,8 @@ function readContextOptions(args) {
   const diffHead = readOption(args, "--diff-head");
   const diffMaxPatchBytesText = readOption(args, "--diff-max-patch-bytes");
   const changeset = buildChangesetOptions(diffBase, diffHead, diffMaxPatchBytesText);
+  const enableStructureScan = args.includes("--enable-structure-scan");
+  const reviewType = readOption(args, "--review-type");
 
   if (
     !projectRoot &&
@@ -591,7 +761,9 @@ function readContextOptions(args) {
     !changeGoal &&
     instructionFiles.length === 0 &&
     designEntrypoints.length === 0 &&
-    !changeset
+    !changeset &&
+    !enableStructureScan &&
+    !reviewType
   ) {
     return null;
   }
@@ -603,7 +775,9 @@ function readContextOptions(args) {
     changeGoal,
     instructionFiles,
     designEntrypoints,
-    ...(changeset ? { changeset } : {})
+    ...(changeset ? { changeset } : {}),
+    ...(enableStructureScan ? { enableStructureScan } : {}),
+    ...(reviewType ? { reviewType } : {})
   };
 }
 
@@ -720,6 +894,41 @@ function dedupe(values) {
   return out;
 }
 
+function normalizeReviewerShortName(name) {
+  return String(name || "").trim();
+}
+
+async function discoverOnlineReviewers(kswarmUrl) {
+  const client = createKswarmHttpClient({ baseUrl: kswarmUrl });
+  const [agentsResult, livenessResult] = await Promise.allSettled([
+    client.listAgents(),
+    client.listAgentsLiveness()
+  ]);
+
+  if (agentsResult.status === "rejected") {
+    throw new Error(`Cannot reach KSwarm at ${kswarmUrl}: ${agentsResult.reason?.message}`);
+  }
+
+  const agents = agentsResult.value.agents || [];
+  const liveness = livenessResult.status === "fulfilled" ? (livenessResult.value.liveness || {}) : {};
+
+  const EXCLUDED_RUNTIME_TYPES = new Set(["xiaok", "xiaok-cli", "builtin"]);
+  const seen = new Set();
+  const reviewers = [];
+
+  for (const agent of agents) {
+    if (agent.archivedAt) continue;
+    const rt = agent.runtimeType;
+    if (!rt || EXCLUDED_RUNTIME_TYPES.has(rt) || seen.has(rt)) continue;
+    const live = liveness[agent.id] || {};
+    if (!live.online) continue;
+    seen.add(rt);
+    reviewers.push(rt);
+  }
+
+  return reviewers;
+}
+
 function printHelp() {
   console.log(`KualityForge
 
@@ -736,13 +945,28 @@ Usage:
   kualityforge gate --artifact-root <path> [--policy <path>]
   kualityforge report --artifact-root <path> [--out <dir>|--report-out <dir>] [--html]
   kualityforge report --input <manifest.json> [--html] [--lang <zh|en>] [--output <file>]
-  kualityforge kswarm-preview --project-id <id> --run-id <id> --artifact-root <path> --reviewer <runner-id>... [--advisory-reviewer <runner-id>...] [--quorum-min <n>] [--project-root <path>] [--docs-root <path>] [--quality-principles <json>] [--change-goal <text>] [--target <path>] [--requested-by <id>]
+  kualityforge kswarm-preview [--project-id <id>] [--run-id <id>] [--artifact-root <path>] [--reviewer <name>...] [--advisory-reviewer <name>...] [--quorum-min <n>] [--kswarm-url <url>] [--project-root <path>] [--docs-root <path>] [--quality-principles <json>] [--change-goal <text>] [--target <path>] [--requested-by <id>]
   kualityforge kswarm-run --offline --preview <preview.json> --plan <runtime-plan.json> --review <runner-id=review.md>... [--advisory-reviewer <runner-id>...] [--quorum-min <n>] --decision <decision.md> --check <name=status> [--verify <verify.md> --verifier-runner-id <id>]
-  kualityforge kswarm-run --mode brokered --kswarm-url <url> --preview <preview.json> --plan <runtime-plan.json> [--advisory-reviewer <runner-id>...] [--quorum-min <n>] --decision <decision.md> --check <name=status> [--verify <verify.md> --verifier-runner-id <id>] [--poll-interval-ms <ms>] [--timeout-ms <ms>]
+  kualityforge kswarm-run --mode brokered [--kswarm-url <url>] [--preview <preview.json> --plan <runtime-plan.json>] [--reviewer <name>...] [--advisory-reviewer <name>...] [--quorum-min <n>] [--decision <decision.md>] [--check <name=status>] [--verify <verify.md> --verifier-runner-id <id>] [--report-out <dir>] [--no-report] [--no-html] [--lang <zh|en>] [--poll-interval-ms <ms>] [--timeout-ms <ms>]
+  kualityforge list-agents [--kswarm-url <url>] [--json]
   kualityforge eval [--corpus <dir>] [--report <path>]
 
 Reports:
-  report output directory precedence: --out/--report-out flag, then KUALITYFORGE_REPORT_OUT_DIR env var, then the built-in default.
+  report output directory precedence: --report-out flag, then KUALITYFORGE_REPORT_OUT_DIR env var, then the built-in default.
+
+KSwarm URL:
+  --kswarm-url can be omitted when KSWARM_URL env var is set. Affects: kswarm-run --mode brokered, kswarm-preview (auto-discover), list-agents.
+
+Smart defaults (kswarm-preview and kswarm-run --mode brokered):
+  --project-id    defaults to the directory name of --project-root (or cwd if omitted).
+  --run-id        defaults to <project-id>-<YYYYMMDD>.
+  --artifact-root defaults to ~/projects/mydocs/<project-id>/quality/<run-id>.
+  --reviewer      if omitted and KSWARM_URL/--kswarm-url is set, all online non-xiaok agents are auto-selected.
+  --preview/--plan omit both for inline mode: kswarm-run builds them from the same args as kswarm-preview.
+  --decision      optional in brokered mode; omit if no human-decision artifact is available.
+  --report-out    defaults to the parent of artifact-root (the quality/<run-id>/../ dir).
+  HTML report is generated by default; use --no-report or --no-html to suppress.
+  Reviewer names accept short forms: codex, claude, qoder, xiaok (KSwarm routes to the active agent).
 
 Quorum review:
   --reviewer marks a required reviewer; --advisory-reviewer marks an advisory (non-blocking) reviewer.

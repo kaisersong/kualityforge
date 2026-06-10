@@ -222,6 +222,96 @@ test("advisory minReviewerScore only produces a warning, never a blocker", () =>
   assert.match(result.warnings.join("\n"), /reviewer codex:r1 score 40 below advisory threshold 60/);
 });
 
+test("vacuous required reviewer blocks the gate", () => {
+  const manifest = completeManifest();
+  manifest.reviewers[0].isVacuous = true;
+
+  const result = reduceQualityGate(manifest);
+
+  assert.equal(result.status, "incomplete");
+  assert.match(result.reasons.join("\n"), /required reviewer codex:r1 produced vacuous output/);
+});
+
+test("vacuous advisory reviewer produces a warning but does not block", () => {
+  const review = {
+    mode: "required_all",
+    requiredReviewers: ["codex:r1"],
+    advisoryReviewers: ["claude:r2"]
+  };
+  const manifest = {
+    runId: "qf-vacuous-advisory",
+    status: "verified",
+    reviewPolicy: { ...review },
+    reviewers: [
+      { runnerId: "codex:r1", status: "completed", artifact: "reviews/codex.md" },
+      { runnerId: "claude:r2", status: "completed", artifact: "reviews/claude.md", isVacuous: true }
+    ],
+    humanDecision: { artifact: "decision.md" },
+    fixer: { runnerId: "codex:fixer" },
+    verification: { runnerId: "xiaok:verifier", status: "verified", artifact: "verify.md" },
+    findings: [],
+    requiredChecks: [{ name: "npm test", status: "passed" }]
+  };
+
+  const result = reduceQualityGate(manifest, { review: { ...review } });
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.exitCode, 0);
+  assert.match(result.warnings.join("\n"), /advisory reviewer claude:r2 produced vacuous output/);
+});
+
+test("dismissed finding does not block the gate", () => {
+  const manifest = completeManifest();
+  manifest.verification = { runnerId: "claude:verifier", status: "verified_with_dismissals", artifact: "verify.md", dismissedCount: 1 };
+  manifest.findings = [
+    { id: "QF-001", status: "dismissed", dismissedBy: "claude:verifier" }
+  ];
+
+  const result = reduceQualityGate(manifest);
+
+  assert.equal(result.status, "passed");
+  assert.equal(result.exitCode, 0);
+  assert.match(result.warnings.join("\n"), /dismissed 1 finding/);
+});
+
+test("verified_with_dismissals with remaining open finding still blocks", () => {
+  const manifest = completeManifest();
+  manifest.verification = { runnerId: "claude:verifier", status: "verified_with_dismissals", artifact: "verify.md", dismissedCount: 1 };
+  manifest.findings = [
+    { id: "QF-001", status: "open" },
+    { id: "QF-002", status: "dismissed", dismissedBy: "claude:verifier" }
+  ];
+
+  const result = reduceQualityGate(manifest);
+
+  assert.equal(result.status, "incomplete");
+  assert.match(result.reasons.join("\n"), /QF-001/);
+  assert.doesNotMatch(result.reasons.join("\n"), /QF-002/);
+  assert.match(result.warnings.join("\n"), /dismissed 1 finding/);
+});
+
+test("partially_verified verification status blocks the gate", () => {
+  const manifest = completeManifest();
+  manifest.verification = { runnerId: "claude:verifier", status: "partially_verified", artifact: "verify.md" };
+  manifest.findings = [];
+
+  const result = reduceQualityGate(manifest);
+
+  assert.equal(result.status, "incomplete");
+  assert.match(result.reasons.join("\n"), /partially_verified/);
+});
+
+test("cannot_verify verification status blocks the gate", () => {
+  const manifest = completeManifest();
+  manifest.verification = { runnerId: "claude:verifier", status: "cannot_verify", artifact: "verify.md" };
+  manifest.findings = [];
+
+  const result = reduceQualityGate(manifest);
+
+  assert.equal(result.status, "incomplete");
+  assert.match(result.reasons.join("\n"), /cannot_verify/);
+});
+
 function completeManifest() {
   return {
     runId: "qf-run-complete",

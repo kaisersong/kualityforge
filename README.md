@@ -23,7 +23,13 @@ KualityForge provides a complete artifact-first quality gate workflow — from m
 - Context pack freezing through `kualityforge init --project-root ... --docs-root ... --quality-principles ...`.
 - KSwarm dynamic workflow preview and runtime plan generation through `kualityforge kswarm-preview`.
 - KSwarm runtime executor core and offline smoke command through `kualityforge kswarm-run --offline`.
+- **KSwarm brokered inline mode**: `kswarm-run --mode brokered --project-root <path> --reviewer <name>...` with no `--preview`/`--plan` required — smart defaults derive project ID, run ID, and artifact root automatically.
+- **`list-agents`** command: discover online agents and broker participants from a KSwarm instance, with `--json` output option.
 - Frozen unified changeset so every reviewer judges the identical file set, via `init --diff-base/--diff-head/--diff-max-patch-bytes` and `context/changeset.{json,md}`.
+- **Structure scan and repo map**: `context/structure-scan.{json,md}` is generated when `--project-root` is provided, including a symbol map (exported functions, classes, interfaces across JS/TS/Python/Go), suspicious pattern list, and import graph. Conditionally included in reviewer context — only when actually generated.
+- **Reviewer navigation permissions**: reviewer nodes are dispatched with `allowShell: true` so agents can grep, read files, and navigate the project tree. Desktop-hosted agents have `allowShell` automatically downgraded to `false`.
+- **Reviewer prompt specialization**: when structure scan is present and `reviewType` is `full-project`, each reviewer receives an assigned subset of suspicious patterns as primary focus areas (round-robin distribution).
+- **Per-finding verification closure**: the `kualityforge-verification` block format supports per-finding verdicts (`confirmed`, `dismissed`, `cannot_verify`) with `duplicateKey`-based matching after synthesis. Gate accepts `verified_with_dismissals`; `partially_verified` blocks.
 - Advisory per-reviewer scoring written to `scores.json` (deterministic, never blocks the gate).
 - Per-round induced quality-principle candidates written to `induced-principles.{json,md}` (advisory; human decides adoption).
 - Human report generation through `kualityforge report` (Markdown default, `--html` optional) with a fixed F#/G#/P# table template.
@@ -32,13 +38,14 @@ KualityForge provides a complete artifact-first quality gate workflow — from m
 - Single-command multi-agent review through `kualityforge review --project <path> --agent <name>...` with dynamic dimension assignment (5 standard review dimensions distributed across agents).
 - Recommended review dimensions table in the template spec, with build/install/deploy script security marked as a mandatory dimension.
 - Review artifact context acknowledgement, context provenance, context gaps, and quality principle violation parsing.
+- **Robust review artifact parsing**: `parseReviewArtifact` selects the last valid-JSON block with a `runnerId` field, tolerating KSwarm handoff transcripts that contain many spurious `kualityforge-review` fences from diffs and search results. Handles agents that omit the closing fence.
 - Artifact reference validation rejects absolute paths and `..` traversal.
 - Fail-closed reducer behavior for incomplete quality evidence.
-- Unit tests for pass, reviewer shortage, invalid manifest, non-independent verifier, missing context, missing reviewer acknowledgement, low context confidence, and unresolved must-principle cases.
+- Unit tests for pass, reviewer shortage, invalid manifest, non-independent verifier, missing context, missing reviewer acknowledgement, low context confidence, unresolved must-principle cases, vacuous reviewer output, and per-finding verification statuses.
 - Fixture, golden, CI, and E2E tests for artifact-root initialization, synthesis output, eval, and a clean passing run.
 - Project docs via `docs -> ../mydocs/kualityforge`.
 
-Live multi-agent runner dispatch is intentionally outside the deterministic core. The local `run` command consumes already-created artifacts; it does not call models. `kswarm-preview` emits the KSwarm `script_generated` preview and KualityForge runtime plan. `kswarm-run --offline` executes that plan against an in-memory KSwarm client for contract and artifact smoke testing; live KSwarm / Intent Broker adapters are separate integration work.
+Live multi-agent runner dispatch is intentionally outside the deterministic core. The local `run` command consumes already-created artifacts; it does not call models. `kswarm-preview` emits the KSwarm `script_generated` preview and KualityForge runtime plan. `kswarm-run --offline` executes that plan against an in-memory KSwarm client for contract and artifact smoke testing. `kswarm-run --mode brokered` dispatches reviewers to live KSwarm agents and polls for completion, producing a report automatically.
 
 ---
 
@@ -322,8 +329,10 @@ kualityforge gate --manifest <path>
 kualityforge gate --artifact-root <path>
 kualityforge report --artifact-root <path> [--out <dir>|--report-out <dir>] [--html] [--lang <zh|en>]
 kualityforge report --input <manifest.json> [--html] [--lang <zh|en>] [--output <file>]
-kualityforge kswarm-preview --project-id <id> --run-id <id> --artifact-root <path> --reviewer <runner-id>...
+kualityforge kswarm-preview [--project-id <id>] [--run-id <id>] [--artifact-root <path>] [--reviewer <runner-id>...] [--project-root <path>]
 kualityforge kswarm-run --offline --preview <preview.json> --plan <runtime-plan.json> --review <runner-id=review.md>... --decision <decision.md> --check <name=status> [--verify <verify.md> --verifier-runner-id <id>]
+kualityforge kswarm-run --mode brokered --project-root <path> --reviewer <name>... [--run-id <id>] [--artifact-root <path>] [--lang <zh|en>] [--report] [--html] [--out <dir>]
+kualityforge list-agents [--kswarm-url <url>] [--json]
 kualityforge eval [--corpus <dir>] [--report <path>]
 ```
 

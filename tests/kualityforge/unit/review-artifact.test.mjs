@@ -89,3 +89,64 @@ test("parseReviewArtifact rejects missing structured block", () => {
 test("safeArtifactName makes runner ids file-safe", () => {
   assert.equal(safeArtifactName("codex:gpt-5/session 1"), "codex-gpt-5-session-1");
 });
+
+test("parseReviewArtifact detects vacuous output with empty findings", () => {
+  const review = parseReviewArtifact(`# Review
+
+\`\`\`kualityforge-review
+{
+  "runnerId": "codex:gpt-5",
+  "status": "completed",
+  "findings": []
+}
+\`\`\`
+`);
+
+  assert.equal(review.isVacuous, true);
+});
+
+test("parseReviewArtifact detects vacuous output with short findings", () => {
+  const review = parseReviewArtifact(`# Review
+
+\`\`\`kualityforge-review
+{
+  "runnerId": "codex:gpt-5",
+  "status": "completed",
+  "findings": [
+    {
+      "id": "QF-001",
+      "title": "ok",
+      "severity": "info",
+      "status": "open"
+    }
+  ]
+}
+\`\`\`
+`);
+
+  assert.equal(review.isVacuous, true);
+});
+
+test("parseReviewArtifact marks substantive findings as non-vacuous", () => {
+  const review = parseReviewArtifact(`# Review
+
+\`\`\`kualityforge-review
+{
+  "runnerId": "codex:gpt-5",
+  "status": "completed",
+  "findings": [
+    {
+      "id": "QF-001",
+      "title": "Missing input validation on API endpoint allows injection attacks via unsanitized user input",
+      "description": "The /api/users endpoint does not validate or sanitize the email parameter before passing it to the database query",
+      "suggestion": "Add input validation using a schema library and parameterized queries",
+      "severity": "blocker",
+      "status": "open"
+    }
+  ]
+}
+\`\`\`
+`);
+
+  assert.equal(review.isVacuous, false);
+});

@@ -85,6 +85,11 @@ export function createKswarmRuntimePlan(options = {}) {
   });
 
   const baseContextArgs = createContextCliArgs(normalized);
+  const contextRequired = [...DEFAULT_CONTEXT_REQUIRED];
+  if (normalized.enableStructureScan || normalized.reviewType === "full-project") {
+    contextRequired.push("structure_scan");
+  }
+
   const operations = [
     {
       type: "create_proposal",
@@ -124,7 +129,7 @@ export function createKswarmRuntimePlan(options = {}) {
       required: true,
       evidenceRequired: true,
       outputArtifact: reviewer.outputArtifact,
-      contextRequired: [...DEFAULT_CONTEXT_REQUIRED]
+      contextRequired: [...contextRequired]
     })),
     {
       type: "write_review_artifact",
@@ -173,8 +178,10 @@ export function createKswarmRuntimePlan(options = {}) {
     qualityPrinciplesPath: normalized.qualityPrinciplesPath,
     changeGoal: normalized.changeGoal,
     changeset: normalized.changeset,
+    enableStructureScan: normalized.enableStructureScan,
+    reviewType: normalized.reviewType,
     reviewers,
-    contextRequired: [...DEFAULT_CONTEXT_REQUIRED],
+    contextRequired,
     operations
   };
 }
@@ -197,7 +204,32 @@ export function createKswarmReviewerNodeInput(options = {}) {
     "- If context/changeset.json reports patchTruncated:true, treat unlisted hunks as out of scope and record a contextGap.",
     `- Read ${normalized.artifactRoot}/context/user-quality-principles.json when it exists.`,
     "- Use project instructions and docs listed in the project brief as higher-priority context than generic assumptions.",
+  ];
+  if (normalized.hasStructureScan) {
+    promptLines.push("");
+    promptLines.push("Repository structure:");
+    promptLines.push(`- Read ${normalized.artifactRoot}/context/structure-scan.md for the repository structure, suspicious patterns, and symbol map.`);
+    promptLines.push("- Use the suspicious patterns list to identify files that need deep reading; do NOT read every file line-by-line.");
+    if (normalized.reviewType === "full-project") {
+      promptLines.push("- For files flagged by the structure scan, read them individually to verify the finding.");
+    }
+  }
+  if (normalized.hasStructureScan && normalized.reviewType === "full-project" && Array.isArray(normalized.focusPatterns) && normalized.focusPatterns.length > 0) {
+    promptLines.push("");
+    promptLines.push("Your primary focus areas (from structure scan):");
+    for (const pattern of normalized.focusPatterns) {
+      promptLines.push(`- ${pattern.label}: ${(pattern.topFiles || []).slice(0, 5).join(", ")}`);
+    }
+  }
+  promptLines.push(
     "",
+    "Navigation guidance:",
+    "You have full access to the project source tree. Use your file-reading and search tools to:",
+    "- Verify findings by reading the actual source files referenced in the changeset.",
+    "- Navigate to related code using your grep/glob capabilities for context understanding.",
+    "- The frozen changeset defines your review SCOPE — your findings must ONLY cover changes in the changeset. You may explore other files for context, but do not report findings about code outside the changeset."
+  );
+  promptLines.push(
     "Your entire final message MUST BE the review, written as Markdown. Do not summarize or describe it; emit the Markdown itself.",
     "The Markdown MUST contain exactly one fenced JSON block, written verbatim with this fence and shape (fill in real findings):",
     "",
@@ -221,7 +253,7 @@ export function createKswarmReviewerNodeInput(options = {}) {
     "```",
     "",
     `Save the artifact to ${normalized.outputArtifact}. KSwarm node summaries alone are not KualityForge gate evidence.`
-  ];
+  );
   if (normalized.lang === "zh") {
     promptLines.push("");
     promptLines.push("语言要求：所有 finding 的 title、description、suggestion 字段必须使用中文撰写。duplicateKey 和 id 保持英文 slug。");
@@ -238,6 +270,7 @@ export function createKswarmReviewerNodeInput(options = {}) {
     fanoutItemLabel: normalized.runnerId,
     required,
     evidenceRequired: true,
+    permissions: { allowShell: true, allowWrite: false, allowNetwork: false, allowExternalAction: false },
     prompt,
     options: {
       role: "reviewer",
@@ -246,9 +279,28 @@ export function createKswarmReviewerNodeInput(options = {}) {
       runnerId: normalized.runnerId,
       artifactRoot: normalized.artifactRoot,
       outputArtifact: normalized.outputArtifact,
-      contextRequired: [...DEFAULT_CONTEXT_REQUIRED]
+      contextRequired: normalized.hasStructureScan
+        ? [...DEFAULT_CONTEXT_REQUIRED, "structure_scan"]
+        : [...DEFAULT_CONTEXT_REQUIRED]
     }
   };
+}
+
+export function assignFocusPatterns(suspiciousPatterns, reviewers) {
+  if (!Array.isArray(suspiciousPatterns) || suspiciousPatterns.length === 0) return null;
+  if (!Array.isArray(reviewers) || reviewers.length === 0) return null;
+  const runnerIds = reviewers.map((r) => (typeof r === "string" ? r : r.runnerId)).filter(Boolean);
+  if (runnerIds.length === 0) return null;
+  const assignment = new Map(runnerIds.map((id) => [id, []]));
+  for (let i = 0; i < suspiciousPatterns.length; i++) {
+    const pattern = suspiciousPatterns[i];
+    const runnerId = runnerIds[i % runnerIds.length];
+    assignment.get(runnerId).push({
+      label: pattern.pattern || pattern.label || String(i),
+      topFiles: (pattern.files || []).slice(0, 5).map((f) => (typeof f === "string" ? f : f.path))
+    });
+  }
+  return assignment;
 }
 
 export function mapGateResultToKswarmTerminal(gateResult = {}, options = {}) {
@@ -289,6 +341,8 @@ function normalizeWorkflowOptions(options) {
     qualityPrinciplesPath: options.qualityPrinciplesPath || null,
     changeGoal: options.changeGoal || null,
     changeset: normalizeChangesetOptions(options.changeset),
+    enableStructureScan: Boolean(options.enableStructureScan),
+    reviewType: options.reviewType || (normalizeChangesetOptions(options.changeset) ? "changeset" : "full-project"),
     requestedBy: options.requestedBy || null,
     createdAt: Number.isFinite(Number(options.createdAt)) ? Number(options.createdAt) : Date.now()
   };
@@ -303,7 +357,10 @@ function normalizeReviewerNodeOptions(options) {
     target: options.target || ".",
     outputArtifact: options.outputArtifact || `reviews/${safeArtifactName(runnerId)}.md`,
     parallelGroupId: requireString(options.parallelGroupId, "parallelGroupId"),
-    lang: options.lang || null
+    lang: options.lang || null,
+    reviewType: options.reviewType || null,
+    hasStructureScan: options.hasStructureScan || false,
+    focusPatterns: options.focusPatterns || null
   };
 }
 

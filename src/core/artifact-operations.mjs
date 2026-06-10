@@ -3,6 +3,7 @@ import { basename, dirname, join } from "node:path";
 import { loadManifestFromArtifactRoot, saveManifestToArtifactRoot } from "./artifact-root.mjs";
 import { parseReviewArtifact, safeArtifactName } from "./review-artifact.mjs";
 import { renderSummaryMarkdown, synthesizeFindings } from "./synthesis.mjs";
+import { parseVerificationArtifact } from "./verification-artifact.mjs";
 import { scoreReviewers } from "./reviewer-scoring.mjs";
 import { inducePrinciples, renderInducedPrinciplesMarkdown } from "./principle-induction.mjs";
 import {
@@ -33,7 +34,8 @@ export async function writeReviewMarkdownToArtifactRoot(artifactRoot, markdown, 
     contextConfidence: review.contextConfidence,
     contextGaps: review.contextGaps,
     contextProvenance: review.contextProvenance,
-    principleAlignment: review.principleAlignment
+    principleAlignment: review.principleAlignment,
+    isVacuous: review.isVacuous || false
   });
   reviewers.sort((a, b) => a.runnerId.localeCompare(b.runnerId));
 
@@ -49,7 +51,8 @@ export async function writeReviewMarkdownToArtifactRoot(artifactRoot, markdown, 
   return {
     runnerId: review.runnerId,
     artifact,
-    findingCount: review.findings.length
+    findingCount: review.findings.length,
+    isVacuous: review.isVacuous || false
   };
 }
 
@@ -240,19 +243,57 @@ export async function recordCheckResult(artifactRoot, name, status, options = {}
 
 export async function recordVerificationMarkdown(artifactRoot, markdown, options = {}) {
   const runnerId = requireString(options.runnerId, "runnerId");
-  const status = options.status || "verified";
   const artifact = options.artifact || "verify.md";
   assertSafeArtifactPath(artifact, "verification artifact");
   await mkdir(join(artifactRoot, dirname(artifact)), { recursive: true });
   await writeFile(join(artifactRoot, artifact), markdown, "utf8");
   const { manifest } = await loadManifestFromArtifactRoot(artifactRoot);
+
+  let verification;
+  let updatedFindings = manifest.findings;
+
+  try {
+    const parsed = parseVerificationArtifact(markdown);
+    // backfill findings using duplicateKey or id matching
+    const verdictByKey = new Map();
+    for (const verdict of parsed.verdicts) {
+      verdictByKey.set(verdict.findingId, verdict);
+    }
+    updatedFindings = manifest.findings.map((finding) => {
+      const key = finding.duplicateKey || finding.id;
+      const verdict = verdictByKey.get(key) || verdictByKey.get(finding.id);
+      if (!verdict) return finding;
+      if (verdict.status === "dismissed") {
+        return { ...finding, status: "dismissed", dismissedBy: parsed.runnerId };
+      }
+      if (verdict.status === "cannot_verify") {
+        return { ...finding, verificationNote: "cannot_verify" };
+      }
+      return finding;
+    });
+    verification = {
+      runnerId: parsed.runnerId,
+      status: parsed.overallStatus,
+      artifact,
+      verdicts: parsed.verdicts,
+      verdictCount: parsed.verdictCount,
+      confirmedCount: parsed.confirmedCount,
+      dismissedCount: parsed.dismissedCount,
+      cannotVerifyCount: parsed.cannotVerifyCount
+    };
+  } catch {
+    // fallback: use caller-supplied status (backward compatible)
+    verification = {
+      runnerId,
+      status: options.status || "verified",
+      artifact
+    };
+  }
+
   await saveManifestToArtifactRoot(artifactRoot, {
     ...manifest,
-    verification: {
-      runnerId,
-      status,
-      artifact
-    }
+    findings: updatedFindings,
+    verification
   });
   return artifact;
 }

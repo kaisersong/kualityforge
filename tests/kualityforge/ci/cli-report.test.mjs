@@ -86,9 +86,11 @@ async function writeReview(root, filename, runnerId) {
   "findings": [
     {
       "id": "${runnerId}-F1",
-      "title": "Shared cache needs locking",
+      "title": "Shared cache needs locking to prevent race conditions during concurrent access from multiple threads",
+      "description": "The shared cache module does not implement proper synchronization which may lead to data corruption or inconsistent reads when accessed concurrently",
+      "suggestion": "Add appropriate locking mechanisms such as mutexes or read-write locks around cache operations to ensure thread-safe access",
       "severity": "blocker",
-      "status": "open",
+      "status": "risk_accepted",
       "duplicateKey": "race-cache"
     }
   ]

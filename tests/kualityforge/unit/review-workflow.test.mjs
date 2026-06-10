@@ -11,7 +11,16 @@ const SAMPLE_REVIEW = `# Review by codex
 {
   "runnerId": "codex",
   "status": "completed",
-  "findings": []
+  "findings": [
+    {
+      "id": "QF-001",
+      "title": "Potential issue identified during review requiring further investigation and resolution",
+      "description": "A concern was found that may impact code quality, security, or maintainability if not addressed appropriately in a timely manner",
+      "suggestion": "Review the identified area and consider applying the recommended improvement to enhance overall code quality",
+      "severity": "info",
+      "status": "risk_accepted"
+    }
+  ]
 }
 \`\`\`
 `;
@@ -32,7 +41,16 @@ const SECOND_REVIEW = `# Review by claude
 {
   "runnerId": "claude",
   "status": "completed",
-  "findings": []
+  "findings": [
+    {
+      "id": "QF-002",
+      "title": "Potential issue identified during review requiring further investigation and resolution",
+      "description": "A concern was found that may impact code quality, security, or maintainability if not addressed appropriately in a timely manner",
+      "suggestion": "Review the identified area and consider applying the recommended improvement to enhance overall code quality",
+      "severity": "info",
+      "status": "risk_accepted"
+    }
+  ]
 }
 \`\`\`
 `;
@@ -44,7 +62,14 @@ const REVIEW_WITH_FINDING = `# Review by codex
   "runnerId": "codex",
   "status": "completed",
   "findings": [
-    { "id": "F1", "title": "Missing input validation in src/api.ts", "severity": "warning", "status": "open", "reviewers": ["codex"], "count": 1 }
+    {
+      "id": "F1",
+      "title": "Missing input validation in src/api.ts requiring immediate remediation and comprehensive testing",
+      "description": "The API endpoint in src/api.ts lacks input validation which may allow malformed or malicious data to be processed, potentially causing runtime errors or security vulnerabilities in the system",
+      "suggestion": "Add input validation middleware at the API boundary and ensure all request parameters are sanitized and type-checked before being passed to business logic handlers",
+      "severity": "warning",
+      "status": "risk_accepted"
+    }
   ]
 }
 \`\`\`

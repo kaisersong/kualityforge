@@ -204,7 +204,8 @@
     },
     "expected": {
       "status": "invalid_artifact",
-      "exitCode": 1
+      "exitCode": 1,
+      "reasonsInclude": ["reviewer req:1 self-declared role conflicts with policy"]
     }
   },
   {
@@ -244,7 +245,8 @@
     },
     "expected": {
       "status": "invalid_artifact",
-      "exitCode": 1
+      "exitCode": 1,
+      "reasonsInclude": ["reviewOutcomes is missing an entry for expected reviewer adv:3"]
     }
   }
 ]

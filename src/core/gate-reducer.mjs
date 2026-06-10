@@ -107,7 +107,8 @@ function validateContextArtifacts(manifest) {
     "projectContext",
     "projectBrief",
     "docsIndex",
-    "changeset"
+    "changeset",
+    "structureScan"
   ]) {
     const item = context[key];
     if (!item) {
@@ -164,6 +165,20 @@ export function reduceQualityGate(manifest, policy = DEFAULT_RELEASE_POLICY) {
     }
   }
 
+  // isVacuous is set by writeReviewMarkdownToArtifactRoot during artifact write;
+  // the manifest is the gate's authoritative evidence source.
+  for (const reviewer of manifest.reviewers) {
+    if (reviewer.isVacuous === true) {
+      const isAdvisory = isReviewPolicyEnabled(effectivePolicy) &&
+        isAdvisoryReviewer(reviewer.runnerId, effectivePolicy);
+      if (isAdvisory) {
+        warnings.push(`advisory reviewer ${reviewer.runnerId} produced vacuous output`);
+      } else {
+        blockers.push(`required reviewer ${reviewer.runnerId} produced vacuous output`);
+      }
+    }
+  }
+
   if (effectivePolicy.requireHumanDecision && !manifest.humanDecision) {
     blockers.push("human decision artifact is required");
   }
@@ -184,6 +199,9 @@ export function reduceQualityGate(manifest, policy = DEFAULT_RELEASE_POLICY) {
   };
 
   const openFindings = manifest.findings.filter((finding) => {
+    if (finding.status === "dismissed") {
+      return false;
+    }
     return ["open", "approved_for_fix", "fixed", "verification_failed"].includes(
       finding.status
     );
@@ -220,10 +238,14 @@ export function reduceQualityGate(manifest, policy = DEFAULT_RELEASE_POLICY) {
     }
   }
 
+  const PASSING_VERIFICATION_STATUSES = new Set(["verified", "verified_with_dismissals"]);
   if (!manifest.verification) {
     blockers.push("verification artifact is required");
-  } else if (manifest.verification.status !== "verified") {
+  } else if (!PASSING_VERIFICATION_STATUSES.has(manifest.verification.status)) {
     blockers.push(`verification status is ${manifest.verification.status}`);
+  } else if (manifest.verification.status === "verified_with_dismissals") {
+    const dismissedCount = manifest.verification.dismissedCount ?? 0;
+    warnings.push(`verification dismissed ${dismissedCount} finding${dismissedCount !== 1 ? "s" : ""}`);
   }
 
   if (
@@ -315,6 +337,11 @@ function contextBlockers(manifest, contextPolicy) {
   }
 
   return blockers;
+}
+
+function isAdvisoryReviewer(runnerId, policy) {
+  const advisorySet = new Set(policy.review?.advisoryReviewers || []);
+  return advisorySet.has(runnerId);
 }
 
 function mergePolicy(policy) {

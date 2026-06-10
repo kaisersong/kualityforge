@@ -23,7 +23,13 @@ KualityForge 提供完整的 artifact-first 质量门禁工作流——从多 Ag
 - 通过 `kualityforge init --project-root ... --docs-root ... --quality-principles ...` 冻结 context pack。
 - 通过 `kualityforge kswarm-preview` 生成 KSwarm dynamic workflow preview 和 runtime plan。
 - 通过 `kualityforge kswarm-run --offline` 执行 KSwarm runtime executor core 的离线 smoke。
+- **KSwarm brokered 内联模式**：`kswarm-run --mode brokered --project-root <path> --reviewer <name>...`，无需 `--preview`/`--plan`，项目 ID、run ID 和 artifact root 自动推导。
+- **`list-agents`** 命令：发现 KSwarm 实例上的在线 agent 和 broker 参与者，支持 `--json` 输出。
 - 冻结统一变更集，使所有 reviewer 评审同一份文件集合；通过 `init --diff-base/--diff-head/--diff-max-patch-bytes` 与 `context/changeset.{json,md}` 实现。
+- **结构扫描与 Repo Map**：提供 `--project-root` 时生成 `context/structure-scan.{json,md}`，包含符号地图（JS/TS/Python/Go 的导出函数、类、接口）、可疑模式列表和 import 关系图，条件加入 reviewer context——仅在实际生成时引用。
+- **Reviewer 导航权限**：reviewer 节点以 `allowShell: true` 派发，让 agent 可以 grep、读文件、导航项目目录树；桌面宿主 agent 的 `allowShell` 自动降级为 `false`。
+- **Reviewer Prompt 专化**：当结构扫描存在且 `reviewType` 为 `full-project` 时，每个 reviewer 通过轮转分配获得一组可疑模式作为主要关注区域。
+- **逐条 Finding 验证闭环**：`kualityforge-verification` 块格式支持逐条 verdict（`confirmed`、`dismissed`、`cannot_verify`），synthesis 后用 `duplicateKey` 匹配；gate 接受 `verified_with_dismissals`，`partially_verified` 会阻断。
 - 每个 reviewer 的咨询性评分写入 `scores.json`（确定性，不阻断 gate）。
 - 每轮归纳候选质量原则写入 `induced-principles.{json,md}`（咨询；是否纳入由人工决定）。
 - 通过 `kualityforge report` 生成人类可读报告（默认 Markdown，`--html` 可选），采用固定的 F#/G#/P# 表格模板。
@@ -32,13 +38,14 @@ KualityForge 提供完整的 artifact-first 质量门禁工作流——从多 Ag
 - 通过 `kualityforge review --project <path> --agent <name>...` 单命令执行多 Agent 评审，自动分配 5 个标准评审维度。
 - 模板规范新增推荐评审维度表，其中「构建/安装/部署脚本安全」标记为必选维度。
 - review artifact 支持 context acknowledgement、context provenance、context gaps 和质量原则违背 finding。
+- **健壮的 review artifact 解析**：`parseReviewArtifact` 选取最后一个含有效 JSON 且带 `runnerId` 字段的块，可容忍 KSwarm handoff transcript 中来自 diff 和搜索结果的大量伪 `kualityforge-review` fence；同时处理 agent 省略闭合 fence 的情况。
 - artifact reference validation 会拒绝绝对路径和 `..` traversal。
 - 对证据不完整的质量运行执行 fail-closed reducer。
-- 覆盖通过、reviewer 不足、manifest 无效、verifier 不独立、缺 context、缺 reviewer acknowledgement、context confidence low、未解决 must 原则违背等 case 的 unit tests。
+- 覆盖通过、reviewer 不足、manifest 无效、verifier 不独立、缺 context、缺 reviewer acknowledgement、context confidence low、未解决 must 原则违背、vacuous reviewer 输出、逐条验证状态等 case 的 unit tests。
 - 覆盖 artifact-root 初始化、synthesis 输出、eval 和 clean passing run 的 fixture、golden、CI、E2E tests。
 - 通过 `docs -> ../mydocs/kualityforge` 维护项目文档。
 
-真实多 Agent runner dispatch 不属于 deterministic core。当前本地 `run` 命令只消费已经生成的 artifacts，不调用模型。`kswarm-preview` 可以输出 KSwarm `script_generated` preview 和 KualityForge runtime plan。`kswarm-run --offline` 会用 in-memory KSwarm client 执行这份 plan，用于 contract 和 artifact smoke；live KSwarm / Intent Broker adapter 属于后续集成层。
+真实多 Agent runner dispatch 不属于 deterministic core。当前本地 `run` 命令只消费已经生成的 artifacts，不调用模型。`kswarm-preview` 可以输出 KSwarm `script_generated` preview 和 KualityForge runtime plan。`kswarm-run --offline` 会用 in-memory KSwarm client 执行这份 plan，用于 contract 和 artifact smoke。`kswarm-run --mode brokered` 会把 reviewer 派发到真实 KSwarm agent 并轮询完成，自动生成报告。
 
 ---
 
@@ -322,8 +329,10 @@ kualityforge gate --manifest <path>
 kualityforge gate --artifact-root <path>
 kualityforge report --artifact-root <path> [--out <dir>|--report-out <dir>] [--html] [--lang <zh|en>]
 kualityforge report --input <manifest.json> [--html] [--lang <zh|en>] [--output <file>]
-kualityforge kswarm-preview --project-id <id> --run-id <id> --artifact-root <path> --reviewer <runner-id>...
+kualityforge kswarm-preview [--project-id <id>] [--run-id <id>] [--artifact-root <path>] [--reviewer <runner-id>...] [--project-root <path>]
 kualityforge kswarm-run --offline --preview <preview.json> --plan <runtime-plan.json> --review <runner-id=review.md>... --decision <decision.md> --check <name=status> [--verify <verify.md> --verifier-runner-id <id>]
+kualityforge kswarm-run --mode brokered --project-root <path> --reviewer <name>... [--run-id <id>] [--artifact-root <path>] [--lang <zh|en>] [--report] [--html] [--out <dir>]
+kualityforge list-agents [--kswarm-url <url>] [--json]
 kualityforge eval [--corpus <dir>] [--report <path>]
 ```
 

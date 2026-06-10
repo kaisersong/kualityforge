@@ -92,7 +92,7 @@ export async function runReviewWorkflow({
     throw new Error("review requires --project <path> or --artifact-root <path>");
   }
 
-  const context = projectRoot ? { projectRoot } : undefined;
+  const context = projectRoot ? { projectRoot, enableStructureScan: true, reviewType: "full-project" } : undefined;
 
   await initializeArtifactRoot(resolvedArtifactRoot, {
     runId: resolvedRunId,

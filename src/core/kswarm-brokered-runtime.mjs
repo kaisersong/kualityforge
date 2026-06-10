@@ -1,4 +1,4 @@
-import { access } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   initializeArtifactRoot,
@@ -16,6 +16,7 @@ import { reduceQualityGate } from "./gate-reducer.mjs";
 import { deriveRole, isReviewPolicyEnabled, validateReviewPolicyShape } from "./review-policy.mjs";
 import {
   KSWARM_RUNTIME_PLAN_KIND,
+  assignFocusPatterns,
   createKswarmReviewerNodeInput,
   mapGateResultToKswarmTerminal
 } from "./kswarm-workflow.mjs";
@@ -41,7 +42,15 @@ export async function runKswarmBrokeredRuntimePlan(options = {}) {
   const timeoutMs = positiveNumber(options.timeoutMs, DEFAULT_TIMEOUT_MS);
   const sleep = typeof options.sleep === "function" ? options.sleep : defaultSleep;
   const now = typeof options.now === "function" ? options.now : Date.now;
-  const projectId = runtimePlan.projectId;
+
+  // KSwarm uses server-assigned UUID project IDs. Create a script-only container (no PO, no planning).
+  const kswarmProject = await kswarmClient.createScriptProject({
+    name: runtimePlan.projectId,
+    goal: `KualityForge quality gate: ${runtimePlan.runId}`
+  });
+  const projectId = kswarmProject?.id || runtimePlan.projectId;
+  // Patch preview.projectId to match the actual KSwarm project UUID
+  const effectivePreview = projectId !== preview.projectId ? { ...preview, projectId } : preview;
 
   const reviewPolicy = isReviewPolicyEnabled(options.policy) ? options.policy.review : null;
   let requiredSet = null;
@@ -70,8 +79,8 @@ export async function runKswarmBrokeredRuntimePlan(options = {}) {
     }
   }
 
-  const proposal = await kswarmClient.createScriptWorkflowProposal(projectId, preview, {
-    requestedBy: preview.requestedBy || "human"
+  const proposal = await kswarmClient.createScriptWorkflowProposal(projectId, effectivePreview, {
+    requestedBy: effectivePreview.requestedBy || "human"
   });
   const proposalId = proposal?.workflowProposal?.id;
   if (!proposalId) {
@@ -107,6 +116,20 @@ export async function runKswarmBrokeredRuntimePlan(options = {}) {
   }
 
   const expectedReviewers = [];
+  // Load structure-scan to enable conditional prompt and focus pattern specialization
+  let hasStructureScan = false;
+  let focusAssignment = null;
+  const structureScanPath = join(runtimePlan.artifactRoot, "context", "structure-scan.json");
+  try {
+    const scanData = JSON.parse(await readFile(structureScanPath, "utf8"));
+    hasStructureScan = true;
+    if (Array.isArray(scanData.suspiciousPatterns) && scanData.suspiciousPatterns.length > 0) {
+      focusAssignment = assignFocusPatterns(scanData.suspiciousPatterns, runtimePlan.reviewers);
+    }
+  } catch {
+    // structure-scan not generated (no projectRoot) — all reviewers use the same prompt
+  }
+
   for (const reviewer of runtimePlan.reviewers) {
     const role = requiredSet ? deriveRole(reviewer.runnerId, requiredSet) : "required";
     const quorumMember = quorumSet ? quorumSet.has(reviewer.runnerId) : true;
@@ -120,7 +143,10 @@ export async function runKswarmBrokeredRuntimePlan(options = {}) {
       reviewerRole: role,
       quorumMember,
       required: role === "required",
-      lang: options.lang
+      lang: options.lang,
+      reviewType: runtimePlan.reviewType || null,
+      hasStructureScan,
+      focusPatterns: focusAssignment ? focusAssignment.get(reviewer.runnerId) || null : null
     });
     const dispatched = await kswarmClient.dispatchWorkflowScriptAgentNode(projectId, workflowRunId, nodeInput);
     const nodeId = dispatched?.nodeId;
@@ -145,9 +171,7 @@ export async function runKswarmBrokeredRuntimePlan(options = {}) {
   for (;;) {
     const runResult = await kswarmClient.getWorkflowRun(projectId, workflowRunId);
     workflowRun = runResult?.workflowRun || null;
-    const ready = reviewPolicy
-      ? allNodesTerminal(workflowRun, expectedNodeIds)
-      : allNodesCompleted(workflowRun, expectedNodeIds);
+    const ready = allNodesTerminal(workflowRun, expectedNodeIds);
     if (ready) {
       break;
     }
@@ -166,6 +190,11 @@ export async function runKswarmBrokeredRuntimePlan(options = {}) {
 
   if (!reviewPolicy) {
     for (const entry of expectedReviewers) {
+      const nodeStatus = nodeStatusMap.get(entry.nodeId);
+      if (nodeStatus === "blocked" || nodeStatus === "failed") {
+        // Reviewer unavailable — skip it, continue with completed reviewers
+        continue;
+      }
       const artifactPath = join(runtimePlan.artifactRoot, entry.outputArtifact);
       try {
         await access(artifactPath);
@@ -178,6 +207,11 @@ export async function runKswarmBrokeredRuntimePlan(options = {}) {
         expectedRunnerId: entry.reviewer.runnerId,
         artifact: entry.outputArtifact
       });
+      if (artifact.isVacuous) {
+        throw new Error(
+          `required reviewer ${entry.reviewer.runnerId} produced vacuous output (no substantive findings)`
+        );
+      }
       reviewerResults.push({ reviewer: entry.reviewer, nodeId: entry.nodeId, artifact });
     }
   } else {
@@ -249,6 +283,23 @@ export async function runKswarmBrokeredRuntimePlan(options = {}) {
           nodeId: entry.nodeId,
           status: "failed",
           absenceReason: `artifact parse failure: ${error.message}`
+        });
+        continue;
+      }
+
+      if (artifact.isVacuous) {
+        if (isRequired) {
+          throw new Error(
+            `required reviewer ${runnerId} produced vacuous output (no substantive findings)`
+          );
+        }
+        outcomes.push({
+          runnerId,
+          role: entry.role,
+          quorumMember: entry.quorumMember,
+          nodeId: entry.nodeId,
+          status: "skipped",
+          absenceReason: "reviewer produced vacuous output (no substantive findings)"
         });
         continue;
       }
@@ -447,7 +498,9 @@ function createContextOptions(runtimePlan) {
     docsRoots: runtimePlan.docsRoots || [],
     qualityPrinciplesPath: runtimePlan.qualityPrinciplesPath,
     changeGoal: runtimePlan.changeGoal,
-    ...(runtimePlan.changeset ? { changeset: runtimePlan.changeset } : {})
+    ...(runtimePlan.changeset ? { changeset: runtimePlan.changeset } : {}),
+    enableStructureScan: true,
+    ...(runtimePlan.reviewType ? { reviewType: runtimePlan.reviewType } : {})
   };
 }
 

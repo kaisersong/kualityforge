@@ -69,7 +69,16 @@ async function writeReview(root, filename, runnerId) {
 {
   "runnerId": "${runnerId}",
   "status": "completed",
-  "findings": []
+  "findings": [
+    {
+      "id": "QF-001",
+      "title": "Potential issue identified during review requiring further investigation and resolution",
+      "description": "A concern was found that may impact code quality, security, or maintainability if not addressed appropriately in a timely manner",
+      "suggestion": "Review the identified area and consider applying the recommended improvement to enhance overall code quality",
+      "severity": "info",
+      "status": "risk_accepted"
+    }
+  ]
 }
 \`\`\`
 `,

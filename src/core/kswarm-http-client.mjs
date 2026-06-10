@@ -99,6 +99,24 @@ export function createKswarmHttpClient(options = {}) {
         `/projects/${encode(projectId)}/workflows/${encode(workflowRunId)}/script/complete`,
         input
       );
+    },
+    async createScriptProject({ name, goal } = {}) {
+      const created = await send("createScriptProject", "POST", "/projects", {
+        name: name || "kualityforge-run",
+        goal: goal || "",
+        poAgent: "_script_only",
+        autoStartPlanning: false
+      });
+      return created?.project || created;
+    },
+    async listAgents() {
+      return send("listAgents", "GET", "/agents");
+    },
+    async listAgentsLiveness() {
+      return send("listAgentsLiveness", "GET", "/agents/liveness");
+    },
+    async listParticipants() {
+      return send("listParticipants", "GET", "/participants");
     }
   };
 }

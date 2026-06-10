@@ -71,7 +71,9 @@
         "qualityPrinciples": { "$ref": "#/$defs/artifactReference" },
         "projectContext": { "$ref": "#/$defs/artifactReference" },
         "projectBrief": { "$ref": "#/$defs/artifactReference" },
-        "docsIndex": { "$ref": "#/$defs/artifactReference" }
+        "docsIndex": { "$ref": "#/$defs/artifactReference" },
+        "changeset": { "$ref": "#/$defs/artifactReference" },
+        "structureScan": { "anyOf": [{ "$ref": "#/$defs/artifactReference" }, { "type": "null" }] }
       }
     },
     "humanDecision": {
@@ -101,7 +103,23 @@
       "properties": {
         "runnerId": { "type": "string" },
         "status": { "type": "string" },
-        "artifact": { "type": "string" }
+        "artifact": { "type": "string" },
+        "verdicts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["findingId", "status"],
+            "properties": {
+              "findingId": { "type": "string" },
+              "status": { "type": "string", "enum": ["confirmed", "dismissed", "cannot_verify"] },
+              "notes": { "type": "string" }
+            }
+          }
+        },
+        "verdictCount": { "type": "integer", "minimum": 0 },
+        "confirmedCount": { "type": "integer", "minimum": 0 },
+        "dismissedCount": { "type": "integer", "minimum": 0 },
+        "cannotVerifyCount": { "type": "integer", "minimum": 0 }
       }
     },
     "findings": {
@@ -124,7 +142,9 @@
             "type": "array",
             "items": { "type": "string" }
           },
-          "reviewerCount": { "type": "integer", "minimum": 0 }
+          "reviewerCount": { "type": "integer", "minimum": 0 },
+          "dismissedBy": { "type": "string" },
+          "verificationNote": { "type": "string" }
         }
       }
     },

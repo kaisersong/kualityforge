@@ -133,7 +133,16 @@ function reviewMarkdown(runnerId) {
 {
   "runnerId": "${runnerId}",
   "status": "completed",
-  "findings": []
+  "findings": [
+    {
+      "id": "QF-001",
+      "title": "Sample finding for test coverage with sufficient detail to pass vacuous check",
+      "description": "This is a test finding with enough content to exceed the vacuous threshold and ensure the review is considered substantive",
+      "suggestion": "Consider adding more test coverage for edge cases in the validation module",
+      "severity": "info",
+      "status": "risk_accepted"
+    }
+  ]
 }
 \`\`\`
 `;

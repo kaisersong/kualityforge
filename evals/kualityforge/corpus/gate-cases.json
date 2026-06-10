@@ -34,7 +34,7 @@
       "findings": [],
       "requiredChecks": [{ "name": "npm test", "status": "passed" }]
     },
-    "expected": { "status": "incomplete", "exitCode": 2 }
+    "expected": { "status": "incomplete", "exitCode": 2, "reasonsInclude": ["reviewer shortage: expected at least 2, got 1"] }
   },
   {
     "name": "missing verification fails closed",
@@ -49,7 +49,7 @@
       "findings": [],
       "requiredChecks": [{ "name": "npm test", "status": "passed" }]
     },
-    "expected": { "status": "incomplete", "exitCode": 2 }
+    "expected": { "status": "incomplete", "exitCode": 2, "reasonsInclude": ["verification artifact is required"] }
   },
   {
     "name": "path traversal artifact is invalid",
@@ -69,7 +69,7 @@
       "findings": [],
       "requiredChecks": [{ "name": "npm test", "status": "passed" }]
     },
-    "expected": { "status": "invalid_artifact", "exitCode": 1 }
+    "expected": { "status": "invalid_artifact", "exitCode": 1, "reasonsInclude": ["reviewers[0].artifact must stay within artifact root"] }
   },
   {
     "name": "failed required check blocks gate",
@@ -89,7 +89,7 @@
       "findings": [],
       "requiredChecks": [{ "name": "npm test", "status": "failed" }]
     },
-    "expected": { "status": "incomplete", "exitCode": 2 }
+    "expected": { "status": "incomplete", "exitCode": 2, "reasonsInclude": ["required checks not passed: npm test"] }
   },
   {
     "name": "fixer cannot verify its own fix",
@@ -110,7 +110,7 @@
       "findings": [],
       "requiredChecks": [{ "name": "npm test", "status": "passed" }]
     },
-    "expected": { "status": "incomplete", "exitCode": 2 }
+    "expected": { "status": "incomplete", "exitCode": 2, "reasonsInclude": ["verifier runner must be independent from fixer runner"] }
   },
   {
     "name": "missing required context pack blocks release policy",
@@ -136,7 +136,7 @@
       "findings": [],
       "requiredChecks": [{ "name": "npm test", "status": "passed" }]
     },
-    "expected": { "status": "incomplete", "exitCode": 2 }
+    "expected": { "status": "incomplete", "exitCode": 2, "reasonsInclude": ["quality principles artifact is required", "project context artifact is required", "project brief artifact is required"] }
   },
   {
     "name": "reviewer missing quality principles acknowledgement blocks release",
@@ -177,7 +177,7 @@
       "findings": [],
       "requiredChecks": [{ "name": "npm test", "status": "passed" }]
     },
-    "expected": { "status": "incomplete", "exitCode": 2 }
+    "expected": { "status": "incomplete", "exitCode": 2, "reasonsInclude": ["reviewer codex:gpt-5 did not acknowledge context: user_quality_principles"] }
   },
   {
     "name": "user quality principle must violation blocks release even when risk accepted",
@@ -217,7 +217,7 @@
       ],
       "requiredChecks": [{ "name": "npm test", "status": "passed" }]
     },
-    "expected": { "status": "incomplete", "exitCode": 2 }
+    "expected": { "status": "incomplete", "exitCode": 2, "reasonsInclude": ["unresolved must quality principle violations: QF-PRINCIPLE-001"] }
   },
   {
     "name": "shared wrong brief cannot pass without matching context provenance",
@@ -267,6 +267,127 @@
       "findings": [],
       "requiredChecks": [{ "name": "npm test", "status": "passed" }]
     },
-    "expected": { "status": "incomplete", "exitCode": 2 }
+    "expected": { "status": "incomplete", "exitCode": 2, "reasonsInclude": ["reviewer codex:gpt-5 context provenance does not match context manifest"] }
+  },
+  {
+    "name": "verified_with_dismissals with remaining open finding still blocks",
+    "manifest": {
+      "runId": "eval-verified-with-dismissals-open",
+      "status": "verified",
+      "reviewers": [
+        { "runnerId": "codex:gpt-5", "artifact": "reviews/codex.md" },
+        { "runnerId": "claude:sonnet", "artifact": "reviews/claude.md" }
+      ],
+      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "verified_with_dismissals",
+        "artifact": "verify.md",
+        "verdictCount": 2,
+        "confirmedCount": 1,
+        "dismissedCount": 1,
+        "cannotVerifyCount": 0
+      },
+      "findings": [
+        { "id": "QF-001", "status": "open" },
+        { "id": "QF-002", "status": "dismissed", "dismissedBy": "claude:verifier" }
+      ],
+      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+    },
+    "expected": {
+      "status": "incomplete",
+      "exitCode": 2,
+      "reasonsInclude": ["QF-001"]
+    }
+  },
+  {
+    "name": "all findings dismissed with verified_with_dismissals passes gate",
+    "manifest": {
+      "runId": "eval-all-dismissed",
+      "status": "verified",
+      "reviewers": [
+        { "runnerId": "codex:gpt-5", "artifact": "reviews/codex.md" },
+        { "runnerId": "claude:sonnet", "artifact": "reviews/claude.md" }
+      ],
+      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "verified_with_dismissals",
+        "artifact": "verify.md",
+        "verdictCount": 2,
+        "confirmedCount": 0,
+        "dismissedCount": 2,
+        "cannotVerifyCount": 0
+      },
+      "findings": [
+        { "id": "QF-001", "status": "dismissed", "dismissedBy": "claude:verifier" },
+        { "id": "QF-002", "status": "dismissed", "dismissedBy": "claude:verifier" }
+      ],
+      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+    },
+    "expected": {
+      "status": "passed",
+      "exitCode": 0,
+      "warningsInclude": ["dismissed 2 findings"]
+    }
+  },
+  {
+    "name": "partially_verified blocks gate",
+    "manifest": {
+      "runId": "eval-partially-verified",
+      "status": "verified",
+      "reviewers": [
+        { "runnerId": "codex:gpt-5", "artifact": "reviews/codex.md" },
+        { "runnerId": "claude:sonnet", "artifact": "reviews/claude.md" }
+      ],
+      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "partially_verified",
+        "artifact": "verify.md",
+        "verdictCount": 2,
+        "confirmedCount": 1,
+        "dismissedCount": 0,
+        "cannotVerifyCount": 1
+      },
+      "findings": [
+        { "id": "QF-001", "status": "open" },
+        { "id": "QF-002", "status": "open", "verificationNote": "cannot_verify" }
+      ],
+      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+    },
+    "expected": {
+      "status": "incomplete",
+      "exitCode": 2,
+      "reasonsInclude": ["partially_verified"]
+    }
+  },
+  {
+    "name": "cannot_verify verification status blocks gate",
+    "manifest": {
+      "runId": "eval-cannot-verify",
+      "status": "verified",
+      "reviewers": [
+        { "runnerId": "codex:gpt-5", "artifact": "reviews/codex.md" },
+        { "runnerId": "claude:sonnet", "artifact": "reviews/claude.md" }
+      ],
+      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "cannot_verify",
+        "artifact": "verify.md",
+        "verdictCount": 0,
+        "confirmedCount": 0,
+        "dismissedCount": 0,
+        "cannotVerifyCount": 0
+      },
+      "findings": [],
+      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+    },
+    "expected": {
+      "status": "incomplete",
+      "exitCode": 2,
+      "reasonsInclude": ["cannot_verify"]
+    }
   }
 ]
