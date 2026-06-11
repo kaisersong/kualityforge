@@ -2,4 +2,6 @@ node_modules/
 coverage/
 .DS_Store
 *.log
+.governance-log/
+package-lock.json
 evals/kualityforge/reports/*.tmp.json

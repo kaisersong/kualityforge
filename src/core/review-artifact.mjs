@@ -60,7 +60,9 @@ export function parseReviewArtifact(markdown) {
       severity: finding.severity || "warning",
       status: finding.status || "open",
       duplicateKey: finding.duplicateKey || normalizeDuplicateKey(finding.title || finding.id),
-      sourceRunnerId: review.runnerId
+      sourceRunnerId: review.runnerId,
+      description: finding.description || "",
+      suggestion: finding.suggestion || ""
     };
   });
 

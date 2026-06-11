@@ -3,6 +3,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve, basename, dirname } from "node:path";
 import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 import {
   createKswarmHttpClient,
   createOfflineKswarmClient,
@@ -267,7 +268,9 @@ try {
     const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
     const runId = readOption(args, "--run-id") || `${projectId}-${today}`;
 
-    const defaultArtifactRoot = join(homedir(), "projects", "mydocs", projectId, "quality", runId);
+    const defaultArtifactRoot = process.env.KUALITYFORGE_ARTIFACT_ROOT_BASE
+      ? join(process.env.KUALITYFORGE_ARTIFACT_ROOT_BASE, projectId, "quality", runId)
+      : join(process.cwd(), "kualityforge-runs", runId);
     const artifactRoot = readOption(args, "--artifact-root") || defaultArtifactRoot;
 
     const reviewerArgs = readOptions(args, "--reviewer");
@@ -355,7 +358,9 @@ try {
         (projectRoot ? basename(resolve(projectRoot)) : basename(process.cwd()));
       const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
       const runId = readOption(args, "--run-id") || `${projectId}-${today}`;
-      const defaultArtifactRoot = join(homedir(), "projects", "mydocs", projectId, "quality", runId);
+      const defaultArtifactRoot = process.env.KUALITYFORGE_ARTIFACT_ROOT_BASE
+        ? join(process.env.KUALITYFORGE_ARTIFACT_ROOT_BASE, projectId, "quality", runId)
+        : join(process.cwd(), "kualityforge-runs", runId);
       const artifactRoot = readOption(args, "--artifact-root") || defaultArtifactRoot;
 
       const reviewerArgs = readOptions(args, "--reviewer");
@@ -401,7 +406,7 @@ try {
       throw new Error("kswarm-run: provide both --preview and --plan, or neither (inline mode).");
     }
 
-    const advisoryReviewers = readOptions(args, "--advisory-reviewer");
+    const advisoryReviewers = readOptions(args, "--advisory-reviewer").map(normalizeReviewerShortName);
     const quorumMinText = readOption(args, "--quorum-min");
     const planReviewers = Array.isArray(runtimePlan.reviewers)
       ? runtimePlan.reviewers.map((reviewer) => reviewer.runnerId)
@@ -634,7 +639,8 @@ try {
   }
 
   if (command === "eval") {
-    const corpusDir = readOption(args, "--corpus") || resolve("evals/kualityforge/corpus");
+    const moduleDir = dirname(fileURLToPath(import.meta.url));
+    const corpusDir = readOption(args, "--corpus") || resolve(moduleDir, "..", "..", "evals", "kualityforge", "corpus");
     const report = readOption(args, "--report");
     const result = await runDeterministicEval(corpusDir);
     if (report) {
@@ -718,7 +724,7 @@ try {
   throw new Error(`unknown command: ${command}`);
 } catch (error) {
   console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
+  process.exit(64);
 }
 
 function readOption(args, name) {
@@ -960,7 +966,8 @@ KSwarm URL:
 Smart defaults (kswarm-preview and kswarm-run --mode brokered):
   --project-id    defaults to the directory name of --project-root (or cwd if omitted).
   --run-id        defaults to <project-id>-<YYYYMMDD>.
-  --artifact-root defaults to ~/projects/mydocs/<project-id>/quality/<run-id>.
+  --artifact-root defaults to $KUALITYFORGE_ARTIFACT_ROOT_BASE/<project-id>/quality/<run-id> if env var set,
+                  otherwise ./kualityforge-runs/<run-id> relative to cwd.
   --reviewer      if omitted and KSWARM_URL/--kswarm-url is set, all online non-xiaok agents are auto-selected.
   --preview/--plan omit both for inline mode: kswarm-run builds them from the same args as kswarm-preview.
   --decision      optional in brokered mode; omit if no human-decision artifact is available.

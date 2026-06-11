@@ -43,6 +43,15 @@
 | --- | --- | --- | --- | --- | --- |
 | F1 | 标题 | blocker/warning/info | open 等 | 来源 runnerId 列表 | reviewer 数 |
 
+每条 finding 下方，若 description 或 suggestion 非空，用 `<details>` 折叠展开：
+
+<details>
+<summary>F1: 详情与建议</summary>
+
+**Description:** 问题详情
+**Suggestion:** 修复建议
+</details>
+
 ### 4. Consensus Findings（G#）
 仅列 `reviewerCount >= 2`，编号 G1、G2……无共识时写明“无共识问题（>= 2 reviewers）”。
 

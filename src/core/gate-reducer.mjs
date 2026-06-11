@@ -1,4 +1,5 @@
 import { evaluateReviewPolicy, isReviewPolicyEnabled } from "./review-policy.mjs";
+import { isSafeArtifactPath } from "./artifact-operations.mjs";
 
 export const DEFAULT_RELEASE_POLICY = Object.freeze({
   minReviewers: 2,
@@ -125,14 +126,6 @@ function validateContextArtifacts(manifest) {
   }
 
   return errors;
-}
-
-function isSafeArtifactPath(value) {
-  if (typeof value !== "string" || value.length === 0) {
-    return false;
-  }
-
-  return !value.startsWith("/") && !value.split(/[\\/]+/).includes("..");
 }
 
 export function reduceQualityGate(manifest, policy = DEFAULT_RELEASE_POLICY) {

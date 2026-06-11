@@ -30,6 +30,16 @@ export function synthesizeFindings(findings) {
       existing.sourceRunnerIds.sort();
       existing.reviewerCount = existing.sourceRunnerIds.length;
     }
+    if (finding.description && finding.description !== existing.description) {
+      existing.description = [existing.description, finding.description]
+        .filter((d) => typeof d === "string" && d.length > 0)
+        .join("\n\n");
+    }
+    if (finding.suggestion && finding.suggestion !== existing.suggestion) {
+      existing.suggestion = [existing.suggestion, finding.suggestion]
+        .filter((s) => typeof s === "string" && s.length > 0)
+        .join("\n\n");
+    }
   }
 
   return Array.from(groups.values()).sort((a, b) => {
@@ -140,6 +150,12 @@ export function renderSummaryMarkdown({ runId, findings, contextGaps = [], revie
     lines.push(`  - Status: ${finding.status}`);
     lines.push(`  - Reviewers: ${(finding.sourceRunnerIds || []).join(", ")}`);
     lines.push(`  - Reviewer count: ${finding.reviewerCount || 0}`);
+    if (finding.description) {
+      lines.push(`  - Description: ${finding.description}`);
+    }
+    if (finding.suggestion) {
+      lines.push(`  - Suggestion: ${finding.suggestion}`);
+    }
   }
   lines.push("");
 

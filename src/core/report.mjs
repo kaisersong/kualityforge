@@ -21,6 +21,7 @@ const LABELS = {
     findingsTitle: "发现 (F#)",
     noFindings: "未发现问题。",
     fNum: "#", fTitle: "标题", fSeverity: "严重程度", fStatus: "状态", fReviewers: "评审员", fCount: "数量", fId: "Id",
+    fDescription: "详情", fSuggestion: "建议",
     consensusTitle: "共识发现 (G#)",
     noConsensus: "无共识发现（>=2 名评审员）。",
     scoresTitle: "评审员评分",
@@ -67,6 +68,7 @@ const LABELS = {
     findingsTitle: "Findings (F#)",
     noFindings: "No findings were reported.",
     fNum: "#", fTitle: "Title", fSeverity: "Severity", fStatus: "Status", fReviewers: "Reviewers", fCount: "Count", fId: "Id",
+    fDescription: "Description", fSuggestion: "Suggestion",
     consensusTitle: "Consensus Findings (G#)",
     noConsensus: "No findings reached consensus (>= 2 reviewers).",
     scoresTitle: "Reviewer Scores",
@@ -209,6 +211,23 @@ export function renderReportMarkdown(model, { lang = DEFAULT_LANG } = {}) {
       lines.push(
         `| F${index + 1} | ${mdCell(finding.title)} | ${mdCell(finding.severity)} | ${mdCell(finding.status)} | ${mdCell(reviewers)} | ${finding.reviewerCount || 0} |`
       );
+    });
+    lines.push("");
+    model.findings.forEach((finding, index) => {
+      if (finding.description || finding.suggestion) {
+        lines.push(`<details>`);
+        lines.push(`<summary>F${index + 1}: ${L.fDescription} & ${L.fSuggestion}</summary>`);
+        lines.push("");
+        if (finding.description) {
+          lines.push(`**${L.fDescription}:** ${finding.description}`);
+        }
+        if (finding.suggestion) {
+          lines.push(`**${L.fSuggestion}:** ${finding.suggestion}`);
+        }
+        lines.push("");
+        lines.push(`</details>`);
+        lines.push("");
+      }
     });
   }
   lines.push("");
@@ -427,17 +446,28 @@ export function renderReportHtml(model, { lang = DEFAULT_LANG } = {}) {
     parts.push(`<p>${esc(L.noFindings)}</p>`);
   } else {
     parts.push(
-      `<table><thead><tr><th>${esc(L.fNum)}</th><th>${esc(L.fTitle)}</th><th>${esc(L.fSeverity)}</th><th>${esc(L.fStatus)}</th><th>${esc(L.fReviewers)}</th><th>${esc(L.fCount)}</th><th>${esc(L.fId)}</th></tr></thead><tbody>`
+      `<table><thead><tr><th>${esc(L.fNum)}</th><th>${esc(L.fTitle)}</th><th>${esc(L.fSeverity)}</th><th>${esc(L.fStatus)}</th><th>${esc(L.fReviewers)}</th><th>${esc(L.fCount)}</th></tr></thead><tbody>`
     );
     model.findings.forEach((finding, index) => {
       const reviewers = (finding.sourceRunnerIds || []).join(", ") || finding.sourceRunnerId || "unknown";
       parts.push(
-        `<tr><td>F${index + 1}</td><td>${esc(finding.title)}</td><td>${esc(finding.severity)}</td><td>${esc(finding.status)}</td><td>${esc(reviewers)}</td><td>${esc(String(finding.reviewerCount || 0))}</td><td><code>${esc(finding.id)}</code></td></tr>`
+        `<tr><td>F${index + 1}</td><td>${esc(finding.title)}</td><td>${esc(finding.severity)}</td><td>${esc(finding.status)}</td><td>${esc(reviewers)}</td><td>${esc(String(finding.reviewerCount || 0))}</td></tr>`
       );
     });
     parts.push("</tbody></table>");
+    model.findings.forEach((finding, index) => {
+      if (finding.description || finding.suggestion) {
+        parts.push(`<details><summary>F${index + 1}: ${esc(L.fDescription)} & ${esc(L.fSuggestion)}</summary>`);
+        if (finding.description) {
+          parts.push(`<p><strong>${esc(L.fDescription)}:</strong> ${esc(finding.description)}</p>`);
+        }
+        if (finding.suggestion) {
+          parts.push(`<p><strong>${esc(L.fSuggestion)}:</strong> ${esc(finding.suggestion)}</p>`);
+        }
+        parts.push(`</details>`);
+      }
+    });
   }
-
   const consensusFindings = model.findings.filter((finding) => (finding.reviewerCount || 0) >= 2);
   parts.push(`<h2>${esc(L.consensusTitle)}</h2>`);
   if (consensusFindings.length === 0) {

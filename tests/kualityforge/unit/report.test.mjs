@@ -161,3 +161,75 @@ test("changeset mode does not render full-project sections", () => {
   assert.doesNotMatch(md, /Project Overview/);
   assert.doesNotMatch(md, /Risk Matrix/);
 });
+
+test("renderReportMarkdown includes <details> with description and suggestion for findings", () => {
+  const model = buildReportModel({
+    manifest: {
+      runId: "desc-1",
+      findings: [
+        {
+          id: "qf-desc",
+          title: "Missing validation",
+          severity: "blocker",
+          status: "open",
+          reviewerCount: 1,
+          sourceRunnerIds: ["x"],
+          description: "Input not validated",
+          suggestion: "Add validation"
+        }
+      ]
+    },
+    gate: { status: "passed" }
+  });
+  const md = renderReportMarkdown(model, { lang: "en" });
+  assert.match(md, /<details>/);
+  assert.match(md, /<summary>F1/);
+  assert.match(md, /Input not validated/);
+  assert.match(md, /Add validation/);
+});
+
+test("renderReportHtml includes <details> with description and suggestion for findings", () => {
+  const model = buildReportModel({
+    manifest: {
+      runId: "desc-html",
+      findings: [
+        {
+          id: "qf-html",
+          title: "Missing validation",
+          severity: "blocker",
+          status: "open",
+          reviewerCount: 1,
+          sourceRunnerIds: ["x"],
+          description: "Input not validated",
+          suggestion: "Add validation"
+        }
+      ]
+    },
+    gate: { status: "passed" }
+  });
+  const html = renderReportHtml(model, { lang: "en" });
+  assert.match(html, /<details>/);
+  assert.match(html, /Input not validated/);
+  assert.match(html, /Add validation/);
+});
+
+test("renderReportMarkdown omits <details> when description and suggestion are empty", () => {
+  const model = buildReportModel({
+    manifest: {
+      runId: "no-desc",
+      findings: [
+        {
+          id: "qf-nodesc",
+          title: "Short finding",
+          severity: "info",
+          status: "open",
+          reviewerCount: 1,
+          sourceRunnerIds: ["x"]
+        }
+      ]
+    },
+    gate: { status: "passed" }
+  });
+  const md = renderReportMarkdown(model, { lang: "en" });
+  assert.doesNotMatch(md, /<details>/);
+});

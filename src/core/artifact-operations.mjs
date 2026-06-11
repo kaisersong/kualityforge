@@ -168,7 +168,8 @@ export async function writeReportFromArtifactRoot(artifactRoot, options = {}) {
     scores,
     inducedPrinciples,
     changeset,
-    gate: options.gate || null
+    gate: options.gate || null,
+    reviewType: manifest.reviewType || "changeset"
   });
 
   const outDir = resolveReportOutDir(options.outDir, process.env, join(artifactRoot, "reports"));
@@ -283,9 +284,10 @@ export async function recordVerificationMarkdown(artifactRoot, markdown, options
     };
   } catch {
     // fallback: use caller-supplied status (backward compatible)
+    // do not default to "verified" on parse failure — fail closed
     verification = {
       runnerId,
-      status: options.status || "verified",
+      status: options.status || "unparsed",
       artifact
     };
   }
@@ -302,8 +304,24 @@ export async function recordVerificationFile(artifactRoot, input, options = {}) 
   return recordVerificationMarkdown(artifactRoot, await readFile(input, "utf8"), options);
 }
 
+export function isSafeArtifactPath(value) {
+  if (typeof value !== "string" || value.length === 0) {
+    return false;
+  }
+  if (value.startsWith("/") || value.startsWith("\\")) {
+    return false;
+  }
+  if (/^[a-zA-Z]:[\\/]/.test(value)) {
+    return false;
+  }
+  if (value.split(/[\\/]+/).includes("..")) {
+    return false;
+  }
+  return true;
+}
+
 function assertSafeArtifactPath(value, label) {
-  if (typeof value !== "string" || value.length === 0 || value.startsWith("/") || value.split(/[\\/]+/).includes("..")) {
+  if (!isSafeArtifactPath(value)) {
     throw new Error(`${label} must stay within artifact root`);
   }
 }

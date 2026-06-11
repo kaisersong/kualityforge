@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { devNull } from "node:os";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -71,7 +72,7 @@ export async function computeChangeset({
         .filter(Boolean)
         .sort((a, b) => a.localeCompare(b));
       for (const path of untracked) {
-        const diff = await gitAllowDiff(["diff", "--no-index", "--", "/dev/null", path]);
+        const diff = await gitAllowDiff(["diff", "--no-index", "--", devNull, path]);
         const stats = countAddedLines(diff);
         files.push({ path, status: "A", added: stats.added, deleted: 0 });
         untrackedPatch += diff;
@@ -137,7 +138,7 @@ export function renderChangesetMarkdown(changeset) {
   lines.push(`- Lines: +${changeset.totals.added} / -${changeset.totals.deleted}`);
   if (changeset.patchTruncated) {
     lines.push(
-      `- NOTE: patch truncated at ${changeset.patch.length} of ${changeset.patchBytes} bytes; treat unlisted hunks as out of scope.`
+      `- NOTE: patch truncated at ${changeset.patchBytes} bytes max; treat unlisted hunks as out of scope.`
     );
   }
   lines.push("");

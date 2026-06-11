@@ -27,6 +27,54 @@ test("synthesizeFindings merges findings with the same duplicate key", () => {
   assert.deepEqual(findings[0].sourceRunnerIds, ["claude", "codex"]);
 });
 
+test("synthesizeFindings appends different descriptions and suggestions when merging", () => {
+  const findings = synthesizeFindings([
+    {
+      id: "QF-001",
+      title: "Missing dependency",
+      severity: "blocker",
+      status: "open",
+      duplicateKey: "missing-dep",
+      sourceRunnerId: "codex",
+      description: "Package foo is not in package.json",
+      suggestion: "Add foo to dependencies"
+    },
+    {
+      id: "QF-002",
+      title: "Runtime dependency not declared",
+      severity: "warning",
+      status: "open",
+      duplicateKey: "missing-dep",
+      sourceRunnerId: "claude",
+      description: "Package foo is imported but undeclared",
+      suggestion: "Run npm install foo --save"
+    }
+  ]);
+
+  assert.equal(findings.length, 1);
+  assert.ok(findings[0].description.includes("Package foo is not in package.json"));
+  assert.ok(findings[0].description.includes("Package foo is imported but undeclared"));
+  assert.ok(findings[0].suggestion.includes("Add foo to dependencies"));
+  assert.ok(findings[0].suggestion.includes("Run npm install foo --save"));
+});
+
+test("synthesizeFindings preserves description and suggestion through spread", () => {
+  const findings = synthesizeFindings([
+    {
+      id: "QF-001",
+      title: "Missing dependency",
+      severity: "blocker",
+      status: "open",
+      sourceRunnerId: "codex",
+      description: "Package foo is not in package.json",
+      suggestion: "Add foo to dependencies"
+    }
+  ]);
+
+  assert.equal(findings[0].description, "Package foo is not in package.json");
+  assert.equal(findings[0].suggestion, "Add foo to dependencies");
+});
+
 test("renderSummaryMarkdown writes a human decision checklist", () => {
   const markdown = renderSummaryMarkdown({
     runId: "run-1",

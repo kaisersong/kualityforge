@@ -127,6 +127,54 @@ test("parseReviewArtifact detects vacuous output with short findings", () => {
   assert.equal(review.isVacuous, true);
 });
 
+test("parseReviewArtifact preserves description and suggestion in mapped findings", () => {
+  const review = parseReviewArtifact(`# Review
+
+\`\`\`kualityforge-review
+{
+  "runnerId": "codex:gpt-5",
+  "status": "completed",
+  "findings": [
+    {
+      "id": "QF-001",
+      "title": "Missing input validation on API endpoint allows injection attacks",
+      "description": "The /api/users endpoint does not validate the email parameter",
+      "suggestion": "Add input validation using a schema library",
+      "severity": "blocker",
+      "status": "open"
+    }
+  ]
+}
+\`\`\`
+`);
+
+  assert.equal(review.findings[0].description, "The /api/users endpoint does not validate the email parameter");
+  assert.equal(review.findings[0].suggestion, "Add input validation using a schema library");
+});
+
+test("parseReviewArtifact defaults description and suggestion to empty string when absent", () => {
+  const review = parseReviewArtifact(`# Review
+
+\`\`\`kualityforge-review
+{
+  "runnerId": "codex:gpt-5",
+  "status": "completed",
+  "findings": [
+    {
+      "id": "QF-001",
+      "title": "Potential issue identified during review requiring further investigation and resolution",
+      "severity": "info",
+      "status": "open"
+    }
+  ]
+}
+\`\`\`
+`);
+
+  assert.equal(review.findings[0].description, "");
+  assert.equal(review.findings[0].suggestion, "");
+});
+
 test("parseReviewArtifact marks substantive findings as non-vacuous", () => {
   const review = parseReviewArtifact(`# Review
 

@@ -39,7 +39,8 @@ export async function initializeArtifactRoot(artifactRoot, options) {
 
   const manifest = {
     ...createInitialManifest(options),
-    ...(context ? { context } : {})
+    ...(context ? { context } : {}),
+    ...(options.context?.reviewType ? { reviewType: options.context.reviewType } : {})
   };
   const manifestPath = join(artifactRoot, MANIFEST_FILE);
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");

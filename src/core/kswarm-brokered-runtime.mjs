@@ -44,11 +44,14 @@ export async function runKswarmBrokeredRuntimePlan(options = {}) {
   const now = typeof options.now === "function" ? options.now : Date.now;
 
   // KSwarm uses server-assigned UUID project IDs. Create a script-only container (no PO, no planning).
-  const kswarmProject = await kswarmClient.createScriptProject({
-    name: runtimePlan.projectId,
-    goal: `KualityForge quality gate: ${runtimePlan.runId}`
-  });
-  const projectId = kswarmProject?.id || runtimePlan.projectId;
+  let projectId = runtimePlan.projectId;
+  if (typeof kswarmClient.createScriptProject === "function") {
+    const kswarmProject = await kswarmClient.createScriptProject({
+      name: runtimePlan.projectId,
+      goal: `KualityForge quality gate: ${runtimePlan.runId}`
+    });
+    projectId = kswarmProject?.id || runtimePlan.projectId;
+  }
   // Patch preview.projectId to match the actual KSwarm project UUID
   const effectivePreview = projectId !== preview.projectId ? { ...preview, projectId } : preview;
 
@@ -396,19 +399,19 @@ export async function runKswarmBrokeredRuntimePlan(options = {}) {
 
 export function buildKswarmGateResult(gate, artifactRoot, manifest = {}) {
   const artifacts = [
-    { path: `${artifactRoot}/manifest.json`, kind: "json", label: "KualityForge manifest" },
-    { path: `${artifactRoot}/summary.md`, kind: "markdown", label: "KualityForge summary" }
+    { path: join(artifactRoot, "manifest.json"), kind: "json", label: "KualityForge manifest" },
+    { path: join(artifactRoot, "summary.md"), kind: "markdown", label: "KualityForge summary" }
   ];
   if (manifest.humanDecision?.artifact) {
     artifacts.push({
-      path: `${artifactRoot}/${manifest.humanDecision.artifact}`,
+      path: join(artifactRoot, manifest.humanDecision.artifact),
       kind: "markdown",
       label: "Human decision"
     });
   }
   if (manifest.verification?.artifact) {
     artifacts.push({
-      path: `${artifactRoot}/${manifest.verification.artifact}`,
+      path: join(artifactRoot, manifest.verification.artifact),
       kind: "markdown",
       label: "Independent verification"
     });
@@ -423,20 +426,6 @@ export function buildKswarmGateResult(gate, artifactRoot, manifest = {}) {
     evidenceRefs: artifacts.map((artifact) => artifact.path),
     reasons: Array.isArray(gate.reasons) ? gate.reasons : []
   };
-}
-
-function allNodesCompleted(workflowRun, expectedNodeIds) {
-  if (!workflowRun || expectedNodeIds.size === 0) {
-    return false;
-  }
-  const nodes = Array.isArray(workflowRun.nodes) ? workflowRun.nodes : [];
-  const completed = new Set();
-  for (const node of nodes) {
-    if (node && expectedNodeIds.has(node.id) && node.status === "completed") {
-      completed.add(node.id);
-    }
-  }
-  return completed.size === expectedNodeIds.size;
 }
 
 function allNodesTerminal(workflowRun, expectedNodeIds) {

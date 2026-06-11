@@ -265,6 +265,10 @@ function createFakeBrokeredClient(artifactRoot, runtimePlan, config = {}) {
 
   return {
     calls,
+    async createScriptProject(input) {
+      calls.push({ type: "create_project", input });
+      return { id: runtimePlan.projectId };
+    },
     async createScriptWorkflowProposal(projectId, preview, input) {
       calls.push({ type: "create_proposal", projectId, preview, input });
       return { ok: true, workflowProposal: { id: "proposal-1", projectId, workflowId: preview.workflowId } };
