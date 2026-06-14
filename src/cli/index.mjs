@@ -4,6 +4,17 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve, basename, dirname } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { renderHelpText } from "./help.mjs";
+import {
+  buildReviewPolicy,
+  parseAgentOptions,
+  parseCheckOption,
+  parseKeyValueOptions,
+  readContextOptions,
+  readOption,
+  readOptions,
+  requireOption
+} from "./options.mjs";
 import {
   createKswarmHttpClient,
   createOfflineKswarmClient,
@@ -727,84 +738,6 @@ try {
   process.exit(64);
 }
 
-function readOption(args, name) {
-  const index = args.indexOf(name);
-  if (index === -1) {
-    return null;
-  }
-  return args[index + 1] || null;
-}
-
-function readOptions(args, name) {
-  const values = [];
-  for (let index = 0; index < args.length; index += 1) {
-    if (args[index] === name && args[index + 1]) {
-      values.push(args[index + 1]);
-      index += 1;
-    }
-  }
-  return values;
-}
-
-function readContextOptions(args) {
-  const projectRoot = readOption(args, "--project-root");
-  const docsRoots = readOptions(args, "--docs-root");
-  const qualityPrinciplesPath = readOption(args, "--quality-principles");
-  const changeGoal = readOption(args, "--change-goal");
-  const instructionFiles = readOptions(args, "--instruction");
-  const designEntrypoints = readOptions(args, "--design-entrypoint");
-  const diffBase = readOption(args, "--diff-base");
-  const diffHead = readOption(args, "--diff-head");
-  const diffMaxPatchBytesText = readOption(args, "--diff-max-patch-bytes");
-  const changeset = buildChangesetOptions(diffBase, diffHead, diffMaxPatchBytesText);
-  const enableStructureScan = args.includes("--enable-structure-scan");
-  const reviewType = readOption(args, "--review-type");
-
-  if (
-    !projectRoot &&
-    docsRoots.length === 0 &&
-    !qualityPrinciplesPath &&
-    !changeGoal &&
-    instructionFiles.length === 0 &&
-    designEntrypoints.length === 0 &&
-    !changeset &&
-    !enableStructureScan &&
-    !reviewType
-  ) {
-    return null;
-  }
-
-  return {
-    projectRoot,
-    docsRoots,
-    qualityPrinciplesPath,
-    changeGoal,
-    instructionFiles,
-    designEntrypoints,
-    ...(changeset ? { changeset } : {}),
-    ...(enableStructureScan ? { enableStructureScan } : {}),
-    ...(reviewType ? { reviewType } : {})
-  };
-}
-
-function buildChangesetOptions(base, head, maxPatchBytesText) {
-  const changeset = {};
-  if (base) {
-    changeset.base = base;
-  }
-  if (head) {
-    changeset.head = head;
-  }
-  if (maxPatchBytesText !== null && maxPatchBytesText !== undefined) {
-    const maxPatchBytes = Number(maxPatchBytesText);
-    if (!Number.isFinite(maxPatchBytes) || maxPatchBytes <= 0) {
-      throw new Error("--diff-max-patch-bytes must be a positive number");
-    }
-    changeset.maxPatchBytes = maxPatchBytes;
-  }
-  return Object.keys(changeset).length > 0 ? changeset : null;
-}
-
 function resolveKswarmRunMode(args) {
   const mode = readOption(args, "--mode");
   if (mode) {
@@ -817,87 +750,6 @@ function resolveKswarmRunMode(args) {
     return "offline";
   }
   throw new Error("kswarm-run requires --offline or --mode brokered --kswarm-url <url>");
-}
-
-function requireOption(args, name, commandName) {
-  const value = readOption(args, name);
-  if (!value) {
-    throw new Error(`${commandName} requires ${name} <value>`);
-  }
-  return value;
-}
-
-function parseCheckOption(value) {
-  const separator = value.indexOf("=");
-  if (separator === -1) {
-    throw new Error("--check must use <name>=<status>");
-  }
-
-  return {
-    name: value.slice(0, separator),
-    status: value.slice(separator + 1)
-  };
-}
-
-function parseAgentOptions(values) {
-  const result = [];
-  for (const value of values) {
-    const separator = value.indexOf("=");
-    if (separator === -1) {
-      result.push({ name: value, path: null });
-    } else {
-      result.push({ name: value.slice(0, separator), path: value.slice(separator + 1) });
-    }
-  }
-  return result;
-}
-
-function parseKeyValueOptions(values, name) {
-  const result = new Map();
-  for (const value of values) {
-    const separator = value.indexOf("=");
-    if (separator === -1) {
-      throw new Error(`${name} must use <key>=<value>`);
-    }
-    result.set(value.slice(0, separator), value.slice(separator + 1));
-  }
-  return result;
-}
-
-function buildReviewPolicy(requiredReviewers, advisoryReviewers, quorumMinText) {
-  const advisory = dedupe(advisoryReviewers || []);
-  const required = dedupe(requiredReviewers || []);
-  const hasQuorum = quorumMinText !== null && quorumMinText !== undefined;
-  if (advisory.length === 0 && !hasQuorum) {
-    return null;
-  }
-  for (const runnerId of advisory) {
-    if (required.includes(runnerId)) {
-      throw new Error(`--advisory-reviewer ${runnerId} cannot downgrade a required reviewer`);
-    }
-  }
-  const mode = hasQuorum ? "quorum" : "required_all";
-  const review = {
-    mode,
-    requiredReviewers: required,
-    advisoryReviewers: advisory
-  };
-  if (mode === "quorum") {
-    review.quorumMembers = [...required, ...advisory];
-    review.quorumMin = Number(quorumMinText);
-  }
-  return review;
-}
-
-function dedupe(values) {
-  const out = [];
-  for (const value of values) {
-    const trimmed = String(value || "").trim();
-    if (trimmed && !out.includes(trimmed)) {
-      out.push(trimmed);
-    }
-  }
-  return out;
 }
 
 function normalizeReviewerShortName(name) {
@@ -936,50 +788,5 @@ async function discoverOnlineReviewers(kswarmUrl) {
 }
 
 function printHelp() {
-  console.log(`KualityForge
-
-Usage:
-  kualityforge init --artifact-root <path> --run-id <id> [--profile <name>] [--project-root <path>] [--docs-root <path>] [--quality-principles <json>] [--change-goal <text>] [--instruction <path>] [--design-entrypoint <path>] [--diff-base <ref>] [--diff-head <ref|WORKTREE>] [--diff-max-patch-bytes <n>]
-  kualityforge run --artifact-root <path> --run-id <id> --review <review.md>... --decision <decision.md> --check <name=status> --verify <verify.md> --verifier-runner-id <id> [--project-root <path>] [--docs-root <path>] [--quality-principles <json>] [--change-goal <text>]
-  kualityforge review --project <path> --agent <name>... [--agent <name=path.md>]... [--report] [--html] [--lang <zh|en>] [--out <dir>]
-  kualityforge write-review --artifact-root <path> --input <review.md>
-  kualityforge synthesize --artifact-root <path>
-  kualityforge decide --artifact-root <path> --input <decision.md>
-  kualityforge record-check --artifact-root <path> --name <name> --status <status>
-  kualityforge verify --artifact-root <path> --runner-id <id> --status <status> --input <verify.md>
-  kualityforge gate --manifest <path>
-  kualityforge gate --artifact-root <path> [--policy <path>]
-  kualityforge report --artifact-root <path> [--out <dir>|--report-out <dir>] [--html]
-  kualityforge report --input <manifest.json> [--html] [--lang <zh|en>] [--output <file>]
-  kualityforge kswarm-preview [--project-id <id>] [--run-id <id>] [--artifact-root <path>] [--reviewer <name>...] [--advisory-reviewer <name>...] [--quorum-min <n>] [--kswarm-url <url>] [--project-root <path>] [--docs-root <path>] [--quality-principles <json>] [--change-goal <text>] [--target <path>] [--requested-by <id>]
-  kualityforge kswarm-run --offline --preview <preview.json> --plan <runtime-plan.json> --review <runner-id=review.md>... [--advisory-reviewer <runner-id>...] [--quorum-min <n>] --decision <decision.md> --check <name=status> [--verify <verify.md> --verifier-runner-id <id>]
-  kualityforge kswarm-run --mode brokered [--kswarm-url <url>] [--preview <preview.json> --plan <runtime-plan.json>] [--reviewer <name>...] [--advisory-reviewer <name>...] [--quorum-min <n>] [--decision <decision.md>] [--check <name=status>] [--verify <verify.md> --verifier-runner-id <id>] [--report-out <dir>] [--no-report] [--no-html] [--lang <zh|en>] [--poll-interval-ms <ms>] [--timeout-ms <ms>]
-  kualityforge list-agents [--kswarm-url <url>] [--json]
-  kualityforge eval [--corpus <dir>] [--report <path>]
-
-Reports:
-  report output directory precedence: --report-out flag, then KUALITYFORGE_REPORT_OUT_DIR env var, then the built-in default.
-
-KSwarm URL:
-  --kswarm-url can be omitted when KSWARM_URL env var is set. Affects: kswarm-run --mode brokered, kswarm-preview (auto-discover), list-agents.
-
-Smart defaults (kswarm-preview and kswarm-run --mode brokered):
-  --project-id    defaults to the directory name of --project-root (or cwd if omitted).
-  --run-id        defaults to <project-id>-<YYYYMMDD>.
-  --artifact-root defaults to $KUALITYFORGE_ARTIFACT_ROOT_BASE/<project-id>/quality/<run-id> if env var set,
-                  otherwise ./kualityforge-runs/<run-id> relative to cwd.
-  --reviewer      if omitted and KSWARM_URL/--kswarm-url is set, all online non-xiaok agents are auto-selected.
-  --preview/--plan omit both for inline mode: kswarm-run builds them from the same args as kswarm-preview.
-  --decision      optional in brokered mode; omit if no human-decision artifact is available.
-  --report-out    defaults to the parent of artifact-root (the quality/<run-id>/../ dir).
-  HTML report is generated by default; use --no-report or --no-html to suppress.
-  Reviewer names accept short forms: codex, claude, qoder, xiaok (KSwarm routes to the active agent).
-
-Quorum review:
-  --reviewer marks a required reviewer; --advisory-reviewer marks an advisory (non-blocking) reviewer.
-  --advisory-reviewer cannot downgrade a runner already declared as --reviewer (required); doing so is rejected.
-  --quorum-min <n> enables quorum mode: at least n of the quorum members (required + advisory) must succeed.
-  Required reviewers are never exempted: a missing or failed required reviewer always blocks the gate,
-  while advisory absence only records warnings.
-`);
+  console.log(renderHelpText());
 }
