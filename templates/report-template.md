@@ -43,14 +43,15 @@
 | --- | --- | --- | --- | --- | --- |
 | F1 | 标题 | blocker/warning/info | open 等 | 来源 runnerId 列表 | reviewer 数 |
 
-每条 finding 下方，若 description 或 suggestion 非空，用 `<details>` 折叠展开：
+每条 finding 下方，若 description 或 suggestion 非空，Markdown 输出使用纯 Markdown 小节，避免在不支持 raw HTML 的渲染器里直接显示标签：
 
-<details>
-<summary>F1: 详情与建议</summary>
+### F1: 详情与建议
 
 **Description:** 问题详情
+
 **Suggestion:** 修复建议
-</details>
+
+HTML 输出可以使用 `<details>` 折叠展示同一内容。
 
 ### 4. Consensus Findings（G#）
 仅列 `reviewerCount >= 2`，编号 G1、G2……无共识时写明“无共识问题（>= 2 reviewers）”。

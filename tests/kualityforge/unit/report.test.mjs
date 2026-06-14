@@ -162,7 +162,7 @@ test("changeset mode does not render full-project sections", () => {
   assert.doesNotMatch(md, /Risk Matrix/);
 });
 
-test("renderReportMarkdown includes <details> with description and suggestion for findings", () => {
+test("renderReportMarkdown uses plain markdown sections for finding details", () => {
   const model = buildReportModel({
     manifest: {
       runId: "desc-1",
@@ -182,8 +182,9 @@ test("renderReportMarkdown includes <details> with description and suggestion fo
     gate: { status: "passed" }
   });
   const md = renderReportMarkdown(model, { lang: "en" });
-  assert.match(md, /<details>/);
-  assert.match(md, /<summary>F1/);
+  assert.doesNotMatch(md, /<details>/);
+  assert.doesNotMatch(md, /<summary>/);
+  assert.match(md, /### F1: Description & Suggestion/);
   assert.match(md, /Input not validated/);
   assert.match(md, /Add validation/);
 });
@@ -213,7 +214,7 @@ test("renderReportHtml includes <details> with description and suggestion for fi
   assert.match(html, /Add validation/);
 });
 
-test("renderReportMarkdown omits <details> when description and suggestion are empty", () => {
+test("renderReportMarkdown omits finding detail section when description and suggestion are empty", () => {
   const model = buildReportModel({
     manifest: {
       runId: "no-desc",
@@ -232,4 +233,5 @@ test("renderReportMarkdown omits <details> when description and suggestion are e
   });
   const md = renderReportMarkdown(model, { lang: "en" });
   assert.doesNotMatch(md, /<details>/);
+  assert.doesNotMatch(md, /### F1: Description & Suggestion/);
 });

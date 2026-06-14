@@ -59,18 +59,16 @@ export function renderReportMarkdown(model, { lang = DEFAULT_LANG } = {}) {
     lines.push("");
     model.findings.forEach((finding, index) => {
       if (finding.description || finding.suggestion) {
-        lines.push(`<details>`);
-        lines.push(`<summary>F${index + 1}: ${L.fDescription} & ${L.fSuggestion}</summary>`);
+        lines.push(`### F${index + 1}: ${L.fDescription} & ${L.fSuggestion}`);
         lines.push("");
         if (finding.description) {
           lines.push(`**${L.fDescription}:** ${finding.description}`);
+          lines.push("");
         }
         if (finding.suggestion) {
           lines.push(`**${L.fSuggestion}:** ${finding.suggestion}`);
+          lines.push("");
         }
-        lines.push("");
-        lines.push(`</details>`);
-        lines.push("");
       }
     });
   }
