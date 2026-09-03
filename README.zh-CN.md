@@ -10,6 +10,8 @@
 
 ## 当前状态
 
+当前发布版本：`v0.5.0`。
+
 KualityForge 提供完整的 artifact-first 质量门禁工作流——从多 Agent 评审到确定性门禁判定和人类可读报告。当前已实现：
 
 - `manifest.json` / policy schema。

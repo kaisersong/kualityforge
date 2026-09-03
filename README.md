@@ -10,6 +10,8 @@ A local, auditable quality gate core for projects that need more than a single-a
 
 ## Status
 
+Current release: `v0.5.0`.
+
 KualityForge provides a complete artifact-first quality gate workflow — from multi-agent review to deterministic gate evaluation and human-readable reports. Currently implemented:
 
 - `manifest.json` / policy schema.
