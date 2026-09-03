@@ -1,9 +1,12 @@
 export {
   DEFAULT_RELEASE_POLICY,
+  findArtifactNameCollisions,
   reduceQualityGate,
   validateArtifactReferences,
   validateManifestShape
 } from "./core/gate-reducer.mjs";
+
+export { GATE_MARKERS } from "./core/gate-markers.mjs";
 
 export {
   MANIFEST_FILE,
@@ -14,11 +17,17 @@ export {
   updateManifestInArtifactRoot
 } from "./core/artifact-root.mjs";
 
+export {
+  collectIntegrityErrors,
+  loadGateInputFromArtifactRoot
+} from "./core/gate-input.mjs";
+
 export { loadPolicyFile, normalizePolicy } from "./core/policy.mjs";
 export { buildContextPack } from "./core/context-pack.mjs";
 export { parseReviewArtifact, safeArtifactName } from "./core/review-artifact.mjs";
 export { renderSummaryMarkdown, synthesizeFindings } from "./core/synthesis.mjs";
 export {
+  normalizeArtifactKey,
   recordCheckResult,
   recordDecisionFile,
   recordDecisionMarkdown,

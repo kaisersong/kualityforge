@@ -3,15 +3,15 @@ export function renderHelpText() {
 
 Usage:
   kualityforge init --artifact-root <path> --run-id <id> [--profile <name>] [--project-root <path>] [--docs-root <path>] [--quality-principles <json>] [--change-goal <text>] [--instruction <path>] [--design-entrypoint <path>] [--diff-base <ref>] [--diff-head <ref|WORKTREE>] [--diff-max-patch-bytes <n>]
-  kualityforge run --artifact-root <path> --run-id <id> --review <review.md>... --decision <decision.md> --check <name=status> --verify <verify.md> --verifier-runner-id <id> [--project-root <path>] [--docs-root <path>] [--quality-principles <json>] [--change-goal <text>]
+  kualityforge run --artifact-root <path> --run-id <id> --review <runnerId>=<review.md>... --decision <decision.md> --owner <id> --check <name=status> --verify <verify.md> --verifier-runner-id <id> [--project-root <path>] [--docs-root <path>] [--quality-principles <json>] [--change-goal <text>]
   kualityforge review --project <path> --agent <name>... [--agent <name=path.md>]... [--report] [--html] [--lang <zh|en>] [--out <dir>]
-  kualityforge write-review --artifact-root <path> --input <review.md>
+  kualityforge write-review --artifact-root <path> --input <review.md> --expected-runner-id <id>
   kualityforge synthesize --artifact-root <path>
-  kualityforge decide --artifact-root <path> --input <decision.md>
+  kualityforge decide --artifact-root <path> --input <decision.md> --owner <id>
   kualityforge record-check --artifact-root <path> --name <name> --status <status>
-  kualityforge verify --artifact-root <path> --runner-id <id> --status <status> --input <verify.md>
-  kualityforge gate --manifest <path>
+  kualityforge verify --artifact-root <path> --runner-id <id> --input <verify.md>
   kualityforge gate --artifact-root <path> [--policy <path>]
+  kualityforge validate --manifest <path>
   kualityforge report --artifact-root <path> [--out <dir>|--report-out <dir>] [--html]
   kualityforge report --input <manifest.json> [--html] [--lang <zh|en>] [--output <file>]
   kualityforge kswarm-preview [--project-id <id>] [--run-id <id>] [--artifact-root <path>] [--reviewer <name>...] [--advisory-reviewer <name>...] [--quorum-min <n>] [--kswarm-url <url>] [--project-root <path>] [--docs-root <path>] [--quality-principles <json>] [--change-goal <text>] [--target <path>] [--requested-by <id>]
@@ -20,11 +20,17 @@ Usage:
   kualityforge list-agents [--kswarm-url <url>] [--json]
   kualityforge eval [--corpus <dir>] [--report <path>]
 
+Gate vs validate:
+  gate reads an artifact root so every reference in the manifest is checked against a real file.
+  validate --manifest only checks manifest structure and cannot replace \`gate\`: it never reports a
+  release verdict, so exit 0 from validate says nothing about whether the run may ship.
+
 Reports:
   report output directory precedence: --report-out flag, then KUALITYFORGE_REPORT_OUT_DIR env var, then the built-in default.
 
 KSwarm URL:
   --kswarm-url can be omitted when KSWARM_URL env var is set. Affects: kswarm-run --mode brokered, kswarm-preview (auto-discover), list-agents.
+  Set KSWARM_DESKTOP_MUTATION_TOKEN when the KSwarm server requires mutation authentication.
 
 Smart defaults (kswarm-preview and kswarm-run --mode brokered):
   --project-id    defaults to the directory name of --project-root (or cwd if omitted).
@@ -44,5 +50,11 @@ Quorum review:
   --quorum-min <n> enables quorum mode: at least n of the quorum members (required + advisory) must succeed.
   Required reviewers are never exempted: a missing or failed required reviewer always blocks the gate,
   while advisory absence only records warnings.
+
+Reviewer identity:
+  Every reviewer write requires the caller to declare the runnerId: run takes --review <runnerId>=<path>
+  and write-review takes --expected-runner-id. A declared id that disagrees with the runnerId inside the
+  artifact is rejected. This is a slot-consistency check, not authentication: it catches an artifact
+  landing in the wrong reviewer slot, but cannot prove who produced the file.
 `;
 }

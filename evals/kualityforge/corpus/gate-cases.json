@@ -5,36 +5,104 @@
       "runId": "eval-clean-release",
       "status": "verified",
       "reviewers": [
-        { "runnerId": "codex:gpt-5", "artifact": "reviews/codex.md" },
-        { "runnerId": "claude:sonnet", "artifact": "reviews/claude.md" }
+        {
+          "runnerId": "codex:gpt-5",
+          "artifact": "reviews/codex.md",
+          "status": "completed",
+          "contextProvenance": {
+            "contextManifestHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          }
+        },
+        {
+          "runnerId": "claude:sonnet",
+          "artifact": "reviews/claude.md",
+          "status": "completed",
+          "contextProvenance": {
+            "contextManifestHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          }
+        }
       ],
-      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-clean-release",
+        "findingSetDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
       "verification": {
         "runnerId": "claude:verifier",
         "status": "verified",
         "artifact": "verify.md"
       },
       "findings": [],
-      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ],
+      "context": {
+        "changeset": {
+          "artifact": "context/changeset.json",
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "available": true
+        },
+        "projectBrief": {
+          "artifact": "context/project-brief.md",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "contextManifest": {
+          "artifact": "context/context-manifest.json",
+          "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        }
+      }
     },
-    "expected": { "status": "passed", "exitCode": 0 }
+    "expected": {
+      "status": "passed",
+      "exitCode": 0
+    }
   },
   {
     "name": "single runner baseline does not pass release policy",
     "manifest": {
       "runId": "eval-single-runner",
       "status": "verified",
-      "reviewers": [{ "runnerId": "codex:gpt-5", "artifact": "reviews/codex.md" }],
-      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "reviewers": [
+        {
+          "runnerId": "codex:gpt-5",
+          "artifact": "reviews/codex.md",
+          "status": "completed"
+        }
+      ],
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-single-runner",
+        "findingSetDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
       "verification": {
         "runnerId": "claude:verifier",
         "status": "verified",
         "artifact": "verify.md"
       },
       "findings": [],
-      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ]
     },
-    "expected": { "status": "incomplete", "exitCode": 2, "reasonsInclude": ["reviewer shortage: expected at least 2, got 1"] }
+    "expected": {
+      "status": "incomplete",
+      "exitCode": 2,
+      "reasonsInclude": [
+        "reviewer shortage: expected at least 2, got 1"
+      ]
+    }
   },
   {
     "name": "missing verification fails closed",
@@ -42,14 +110,40 @@
       "runId": "eval-missing-verify",
       "status": "open",
       "reviewers": [
-        { "runnerId": "codex:gpt-5", "artifact": "reviews/codex.md" },
-        { "runnerId": "claude:sonnet", "artifact": "reviews/claude.md" }
+        {
+          "runnerId": "codex:gpt-5",
+          "artifact": "reviews/codex.md",
+          "status": "completed"
+        },
+        {
+          "runnerId": "claude:sonnet",
+          "artifact": "reviews/claude.md",
+          "status": "completed"
+        }
       ],
-      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-missing-verify",
+        "findingSetDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
       "findings": [],
-      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ]
     },
-    "expected": { "status": "incomplete", "exitCode": 2, "reasonsInclude": ["verification artifact is required"] }
+    "expected": {
+      "status": "incomplete",
+      "exitCode": 2,
+      "reasonsInclude": [
+        "verification artifact is required"
+      ]
+    }
   },
   {
     "name": "path traversal artifact is invalid",
@@ -57,19 +151,45 @@
       "runId": "eval-path-traversal",
       "status": "verified",
       "reviewers": [
-        { "runnerId": "codex:gpt-5", "artifact": "../codex.md" },
-        { "runnerId": "claude:sonnet", "artifact": "reviews/claude.md" }
+        {
+          "runnerId": "codex:gpt-5",
+          "artifact": "../codex.md",
+          "status": "completed"
+        },
+        {
+          "runnerId": "claude:sonnet",
+          "artifact": "reviews/claude.md",
+          "status": "completed"
+        }
       ],
-      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-path-traversal",
+        "findingSetDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
       "verification": {
         "runnerId": "claude:verifier",
         "status": "verified",
         "artifact": "verify.md"
       },
       "findings": [],
-      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ]
     },
-    "expected": { "status": "invalid_artifact", "exitCode": 1, "reasonsInclude": ["reviewers[0].artifact must stay within artifact root"] }
+    "expected": {
+      "status": "invalid_artifact",
+      "exitCode": 1,
+      "reasonsInclude": [
+        "reviewers[0].artifact must stay within artifact root"
+      ]
+    }
   },
   {
     "name": "failed required check blocks gate",
@@ -77,19 +197,45 @@
       "runId": "eval-failed-check",
       "status": "verified",
       "reviewers": [
-        { "runnerId": "codex:gpt-5", "artifact": "reviews/codex.md" },
-        { "runnerId": "claude:sonnet", "artifact": "reviews/claude.md" }
+        {
+          "runnerId": "codex:gpt-5",
+          "artifact": "reviews/codex.md",
+          "status": "completed"
+        },
+        {
+          "runnerId": "claude:sonnet",
+          "artifact": "reviews/claude.md",
+          "status": "completed"
+        }
       ],
-      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-failed-check",
+        "findingSetDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
       "verification": {
         "runnerId": "claude:verifier",
         "status": "verified",
         "artifact": "verify.md"
       },
       "findings": [],
-      "requiredChecks": [{ "name": "npm test", "status": "failed" }]
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "failed"
+        }
+      ]
     },
-    "expected": { "status": "incomplete", "exitCode": 2, "reasonsInclude": ["required checks not passed: npm test"] }
+    "expected": {
+      "status": "incomplete",
+      "exitCode": 2,
+      "reasonsInclude": [
+        "required checks not passed: npm test"
+      ]
+    }
   },
   {
     "name": "fixer cannot verify its own fix",
@@ -97,20 +243,49 @@
       "runId": "eval-self-verify",
       "status": "verified",
       "reviewers": [
-        { "runnerId": "codex:gpt-5", "artifact": "reviews/codex.md" },
-        { "runnerId": "claude:sonnet", "artifact": "reviews/claude.md" }
+        {
+          "runnerId": "codex:gpt-5",
+          "artifact": "reviews/codex.md",
+          "status": "completed"
+        },
+        {
+          "runnerId": "claude:sonnet",
+          "artifact": "reviews/claude.md",
+          "status": "completed"
+        }
       ],
-      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
-      "fixer": { "runnerId": "codex:fixer", "artifact": "fix-plan.md" },
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-self-verify",
+        "findingSetDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
+      "fixer": {
+        "runnerId": "codex:fixer",
+        "artifact": "fix-plan.md"
+      },
       "verification": {
         "runnerId": "codex:fixer",
         "status": "verified",
         "artifact": "verify.md"
       },
       "findings": [],
-      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ]
     },
-    "expected": { "status": "incomplete", "exitCode": 2, "reasonsInclude": ["verifier runner must be independent from fixer runner"] }
+    "expected": {
+      "status": "incomplete",
+      "exitCode": 2,
+      "reasonsInclude": [
+        "verifier runner must be independent from fixer runner"
+      ]
+    }
   },
   {
     "name": "missing required context pack blocks release policy",
@@ -124,19 +299,47 @@
       "runId": "eval-missing-context-pack",
       "status": "verified",
       "reviewers": [
-        { "runnerId": "codex:gpt-5", "artifact": "reviews/codex.md" },
-        { "runnerId": "claude:sonnet", "artifact": "reviews/claude.md" }
+        {
+          "runnerId": "codex:gpt-5",
+          "artifact": "reviews/codex.md",
+          "status": "completed"
+        },
+        {
+          "runnerId": "claude:sonnet",
+          "artifact": "reviews/claude.md",
+          "status": "completed"
+        }
       ],
-      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-missing-context-pack",
+        "findingSetDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
       "verification": {
         "runnerId": "claude:verifier",
         "status": "verified",
         "artifact": "verify.md"
       },
       "findings": [],
-      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ]
     },
-    "expected": { "status": "incomplete", "exitCode": 2, "reasonsInclude": ["quality principles artifact is required", "project context artifact is required", "project brief artifact is required"] }
+    "expected": {
+      "status": "incomplete",
+      "exitCode": 2,
+      "reasonsInclude": [
+        "quality principles artifact is required",
+        "project context artifact is required",
+        "project brief artifact is required"
+      ]
+    }
   },
   {
     "name": "reviewer missing quality principles acknowledgement blocks release",
@@ -144,40 +347,80 @@
       "context": {
         "projectContextRequired": true,
         "qualityPrinciplesRequired": true,
-        "requiredReviewerContextAck": ["user_quality_principles", "project_brief"]
+        "requiredReviewerContextAck": [
+          "user_quality_principles",
+          "project_brief"
+        ]
       }
     },
     "manifest": {
       "runId": "eval-missing-context-ack",
       "status": "verified",
       "context": {
-        "contextManifest": { "artifact": "context/context-manifest.json", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-        "qualityPrinciples": { "artifact": "context/quality-principles.json", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
-        "projectContext": { "artifact": "context/project-context.json", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" },
-        "projectBrief": { "artifact": "context/project-brief.md", "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" }
+        "contextManifest": {
+          "artifact": "context/context-manifest.json",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "qualityPrinciples": {
+          "artifact": "context/quality-principles.json",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "projectContext": {
+          "artifact": "context/project-context.json",
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "projectBrief": {
+          "artifact": "context/project-brief.md",
+          "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        }
       },
       "reviewers": [
         {
           "runnerId": "codex:gpt-5",
           "artifact": "reviews/codex.md",
-          "contextRead": { "project_brief": true }
+          "contextRead": {
+            "project_brief": true
+          },
+          "status": "completed"
         },
         {
           "runnerId": "claude:sonnet",
           "artifact": "reviews/claude.md",
-          "contextRead": { "user_quality_principles": true, "project_brief": true }
+          "contextRead": {
+            "user_quality_principles": true,
+            "project_brief": true
+          },
+          "status": "completed"
         }
       ],
-      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-missing-context-ack",
+        "findingSetDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
       "verification": {
         "runnerId": "claude:verifier",
         "status": "verified",
         "artifact": "verify.md"
       },
       "findings": [],
-      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ]
     },
-    "expected": { "status": "incomplete", "exitCode": 2, "reasonsInclude": ["reviewer codex:gpt-5 did not acknowledge context: user_quality_principles"] }
+    "expected": {
+      "status": "incomplete",
+      "exitCode": 2,
+      "reasonsInclude": [
+        "reviewer codex:gpt-5 did not acknowledge context: user_quality_principles"
+      ]
+    }
   },
   {
     "name": "user quality principle must violation blocks release even when risk accepted",
@@ -191,16 +434,43 @@
       "runId": "eval-must-principle-violation",
       "status": "verified",
       "context": {
-        "contextManifest": { "artifact": "context/context-manifest.json", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-        "qualityPrinciples": { "artifact": "context/quality-principles.json", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
-        "projectContext": { "artifact": "context/project-context.json", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" },
-        "projectBrief": { "artifact": "context/project-brief.md", "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" }
+        "contextManifest": {
+          "artifact": "context/context-manifest.json",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "qualityPrinciples": {
+          "artifact": "context/quality-principles.json",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "projectContext": {
+          "artifact": "context/project-context.json",
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "projectBrief": {
+          "artifact": "context/project-brief.md",
+          "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        }
       },
       "reviewers": [
-        { "runnerId": "codex:gpt-5", "artifact": "reviews/codex.md" },
-        { "runnerId": "claude:sonnet", "artifact": "reviews/claude.md" }
+        {
+          "runnerId": "codex:gpt-5",
+          "artifact": "reviews/codex.md",
+          "status": "completed"
+        },
+        {
+          "runnerId": "claude:sonnet",
+          "artifact": "reviews/claude.md",
+          "status": "completed"
+        }
       ],
-      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-must-principle-violation",
+        "findingSetDigest": "sha256:528745bff0598d1a378ded6920136d9a2a7dd8e76401aff865894851cf168545",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
       "verification": {
         "runnerId": "claude:verifier",
         "status": "verified",
@@ -209,15 +479,27 @@
       "findings": [
         {
           "id": "QF-PRINCIPLE-001",
+          "sourceRunnerId": "codex:gpt-5",
           "type": "quality_principle_violation",
           "priority": "must",
           "principleId": "independent-verification",
           "status": "risk_accepted"
         }
       ],
-      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ]
     },
-    "expected": { "status": "incomplete", "exitCode": 2, "reasonsInclude": ["unresolved must quality principle violations: QF-PRINCIPLE-001"] }
+    "expected": {
+      "status": "incomplete",
+      "exitCode": 2,
+      "reasonsInclude": [
+        "unresolved must findings: QF-PRINCIPLE-001"
+      ]
+    }
   },
   {
     "name": "shared wrong brief cannot pass without matching context provenance",
@@ -225,7 +507,10 @@
       "context": {
         "projectContextRequired": true,
         "qualityPrinciplesRequired": true,
-        "requiredReviewerContextAck": ["user_quality_principles", "project_brief"],
+        "requiredReviewerContextAck": [
+          "user_quality_principles",
+          "project_brief"
+        ],
         "requireReviewerContextProvenance": true
       }
     },
@@ -233,102 +518,356 @@
       "runId": "eval-shared-wrong-brief",
       "status": "verified",
       "context": {
-        "contextManifest": { "artifact": "context/context-manifest.json", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" },
-        "qualityPrinciples": { "artifact": "context/quality-principles.json", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
-        "projectContext": { "artifact": "context/project-context.json", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" },
-        "projectBrief": { "artifact": "context/project-brief.md", "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" }
+        "contextManifest": {
+          "artifact": "context/context-manifest.json",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "qualityPrinciples": {
+          "artifact": "context/quality-principles.json",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "projectContext": {
+          "artifact": "context/project-context.json",
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "projectBrief": {
+          "artifact": "context/project-brief.md",
+          "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        }
       },
       "reviewers": [
         {
           "runnerId": "codex:gpt-5",
           "artifact": "reviews/codex.md",
-          "contextRead": { "user_quality_principles": true, "project_brief": true },
+          "contextRead": {
+            "user_quality_principles": true,
+            "project_brief": true
+          },
           "contextProvenance": {
             "contextManifestHash": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
             "promptContextHash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-          }
+          },
+          "status": "completed"
         },
         {
           "runnerId": "claude:sonnet",
           "artifact": "reviews/claude.md",
-          "contextRead": { "user_quality_principles": true, "project_brief": true },
+          "contextRead": {
+            "user_quality_principles": true,
+            "project_brief": true
+          },
           "contextProvenance": {
             "contextManifestHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "promptContextHash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-          }
+          },
+          "status": "completed"
         }
       ],
-      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-shared-wrong-brief",
+        "findingSetDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
       "verification": {
         "runnerId": "claude:verifier",
         "status": "verified",
         "artifact": "verify.md"
       },
       "findings": [],
-      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
-    },
-    "expected": { "status": "incomplete", "exitCode": 2, "reasonsInclude": ["reviewer codex:gpt-5 context provenance does not match context manifest"] }
-  },
-  {
-    "name": "verified_with_dismissals with remaining open finding still blocks",
-    "manifest": {
-      "runId": "eval-verified-with-dismissals-open",
-      "status": "verified",
-      "reviewers": [
-        { "runnerId": "codex:gpt-5", "artifact": "reviews/codex.md" },
-        { "runnerId": "claude:sonnet", "artifact": "reviews/claude.md" }
-      ],
-      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
-      "verification": {
-        "runnerId": "claude:verifier",
-        "status": "verified_with_dismissals",
-        "artifact": "verify.md",
-        "verdictCount": 2,
-        "confirmedCount": 1,
-        "dismissedCount": 1,
-        "cannotVerifyCount": 0
-      },
-      "findings": [
-        { "id": "QF-001", "status": "open" },
-        { "id": "QF-002", "status": "dismissed", "dismissedBy": "claude:verifier" }
-      ],
-      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ]
     },
     "expected": {
       "status": "incomplete",
       "exitCode": 2,
-      "reasonsInclude": ["QF-001"]
+      "reasonsInclude": [
+        "reviewer codex:gpt-5 context provenance does not match context manifest"
+      ]
     }
   },
   {
-    "name": "all findings dismissed with verified_with_dismissals passes gate",
+    "name": "dispute over a human-dismissed finding still blocks on the remaining open finding",
     "manifest": {
-      "runId": "eval-all-dismissed",
+      "runId": "eval-dispute-open-remains",
       "status": "verified",
       "reviewers": [
-        { "runnerId": "codex:gpt-5", "artifact": "reviews/codex.md" },
-        { "runnerId": "claude:sonnet", "artifact": "reviews/claude.md" }
+        {
+          "runnerId": "codex:gpt-5",
+          "artifact": "reviews/codex.md",
+          "status": "completed"
+        },
+        {
+          "runnerId": "claude:sonnet",
+          "artifact": "reviews/claude.md",
+          "status": "completed"
+        }
       ],
-      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-dispute-open-remains",
+        "findingSetDigest": "sha256:917f20eafa8cd96c1da0780e7710067f4fa3d554bf6726bd79c69c5b5350fc9a",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
       "verification": {
         "runnerId": "claude:verifier",
-        "status": "verified_with_dismissals",
+        "status": "disputed",
         "artifact": "verify.md",
-        "verdictCount": 2,
-        "confirmedCount": 0,
-        "dismissedCount": 2,
-        "cannotVerifyCount": 0
+        "coveredFindingIds": [
+          "QF-001",
+          "QF-002"
+        ],
+        "uncoveredOpenFindingIds": [],
+        "disputedFindings": [
+          "QF-002"
+        ]
       },
       "findings": [
-        { "id": "QF-001", "status": "dismissed", "dismissedBy": "claude:verifier" },
-        { "id": "QF-002", "status": "dismissed", "dismissedBy": "claude:verifier" }
+        {
+          "id": "QF-001",
+          "sourceRunnerId": "codex:gpt-5",
+          "status": "open"
+        },
+        {
+          "id": "QF-002",
+          "sourceRunnerId": "claude:sonnet",
+          "status": "dismissed",
+          "decisionReason": "false positive"
+        }
       ],
-      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ]
+    },
+    "expected": {
+      "status": "incomplete",
+      "exitCode": 2,
+      "reasonsInclude": [
+        "unresolved findings: QF-001"
+      ],
+      "warningsInclude": [
+        "verifier disputed finding QF-002 after a human ruling"
+      ]
+    }
+  },
+  {
+    "name": "verifier disputes only findings a human already dismissed so gate passes with warnings",
+    "manifest": {
+      "runId": "eval-dispute-after-ruling",
+      "status": "verified",
+      "reviewers": [
+        {
+          "runnerId": "codex:gpt-5",
+          "artifact": "reviews/codex.md",
+          "status": "completed",
+          "contextProvenance": {
+            "contextManifestHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          }
+        },
+        {
+          "runnerId": "claude:sonnet",
+          "artifact": "reviews/claude.md",
+          "status": "completed",
+          "contextProvenance": {
+            "contextManifestHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          }
+        }
+      ],
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-dispute-after-ruling",
+        "findingSetDigest": "sha256:34836e217af67d7f99bc24612dbd28892bf17ba0e084be5c4135fc0a5b642133",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "disputed",
+        "artifact": "verify.md",
+        "coveredFindingIds": [
+          "QF-001",
+          "QF-002"
+        ],
+        "uncoveredOpenFindingIds": [],
+        "disputedFindings": [
+          "QF-001",
+          "QF-002"
+        ]
+      },
+      "findings": [
+        {
+          "id": "QF-001",
+          "sourceRunnerIds": [
+            "codex:gpt-5",
+            "claude:sonnet"
+          ],
+          "status": "dismissed",
+          "decisionReason": "false positive"
+        },
+        {
+          "id": "QF-002",
+          "sourceRunnerId": "claude:sonnet",
+          "status": "risk_accepted",
+          "decisionReason": "accepted for this release"
+        }
+      ],
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ],
+      "reviewType": "full-project",
+      "context": {
+        "projectContext": {
+          "artifact": "context/project-context.json",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "projectBrief": {
+          "artifact": "context/project-brief.md",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "contextManifest": {
+          "artifact": "context/context-manifest.json",
+          "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        }
+      }
     },
     "expected": {
       "status": "passed",
       "exitCode": 0,
-      "warningsInclude": ["dismissed 2 findings"]
+      "warningsInclude": [
+        "verifier disputed finding QF-001 after a human ruling",
+        "verifier disputed finding QF-002 after a human ruling"
+      ]
+    }
+  },
+  {
+    "name": "verifier cannot dispose of a finding on its own",
+    "manifest": {
+      "runId": "eval-verifier-cannot-dispose",
+      "status": "verified",
+      "reviewers": [
+        {
+          "runnerId": "codex:gpt-5",
+          "artifact": "reviews/codex.md",
+          "status": "completed"
+        },
+        {
+          "runnerId": "claude:sonnet",
+          "artifact": "reviews/claude.md",
+          "status": "completed"
+        }
+      ],
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-verifier-cannot-dispose",
+        "findingSetDigest": "sha256:48c96e982ed9ae750bee9ff339e85cd32569ee146d6c18fa3bdcc1a54f49491b",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "disputed",
+        "artifact": "verify.md",
+        "coveredFindingIds": [
+          "QF-001"
+        ],
+        "uncoveredOpenFindingIds": [],
+        "disputedFindings": [
+          "QF-001"
+        ]
+      },
+      "findings": [
+        {
+          "id": "QF-001",
+          "sourceRunnerId": "claude:sonnet",
+          "status": "open"
+        }
+      ],
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ]
+    },
+    "expected": {
+      "status": "incomplete",
+      "exitCode": 2,
+      "reasonsInclude": [
+        "verifier disputes unresolved finding QF-001"
+      ]
+    }
+  },
+  {
+    "name": "verification that skipped an open finding blocks the gate",
+    "manifest": {
+      "runId": "eval-uncovered-open-finding",
+      "status": "verified",
+      "reviewers": [
+        {
+          "runnerId": "codex:gpt-5",
+          "artifact": "reviews/codex.md",
+          "status": "completed"
+        },
+        {
+          "runnerId": "claude:sonnet",
+          "artifact": "reviews/claude.md",
+          "status": "completed"
+        }
+      ],
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-uncovered-open-finding",
+        "findingSetDigest": "sha256:48c96e982ed9ae750bee9ff339e85cd32569ee146d6c18fa3bdcc1a54f49491b",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "verified",
+        "artifact": "verify.md",
+        "coveredFindingIds": [],
+        "uncoveredOpenFindingIds": [
+          "QF-001"
+        ],
+        "disputedFindings": []
+      },
+      "findings": [
+        {
+          "id": "QF-001",
+          "sourceRunnerId": "codex:gpt-5",
+          "status": "open"
+        }
+      ],
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ]
+    },
+    "expected": {
+      "status": "incomplete",
+      "exitCode": 2,
+      "reasonsInclude": [
+        "verification did not cover open findings: QF-001"
+      ]
     }
   },
   {
@@ -337,10 +876,25 @@
       "runId": "eval-partially-verified",
       "status": "verified",
       "reviewers": [
-        { "runnerId": "codex:gpt-5", "artifact": "reviews/codex.md" },
-        { "runnerId": "claude:sonnet", "artifact": "reviews/claude.md" }
+        {
+          "runnerId": "codex:gpt-5",
+          "artifact": "reviews/codex.md",
+          "status": "completed"
+        },
+        {
+          "runnerId": "claude:sonnet",
+          "artifact": "reviews/claude.md",
+          "status": "completed"
+        }
       ],
-      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-partially-verified",
+        "findingSetDigest": "sha256:917f20eafa8cd96c1da0780e7710067f4fa3d554bf6726bd79c69c5b5350fc9a",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
       "verification": {
         "runnerId": "claude:verifier",
         "status": "partially_verified",
@@ -351,15 +905,34 @@
         "cannotVerifyCount": 1
       },
       "findings": [
-        { "id": "QF-001", "status": "open" },
-        { "id": "QF-002", "status": "open", "verificationNote": "cannot_verify" }
+        {
+          "id": "QF-001",
+          "sourceRunnerId": "codex:gpt-5",
+          "status": "open"
+        },
+        {
+          "id": "QF-002",
+          "sourceRunnerIds": [
+            "codex:gpt-5",
+            "claude:sonnet"
+          ],
+          "status": "open",
+          "verificationNote": "cannot_verify"
+        }
       ],
-      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ]
     },
     "expected": {
       "status": "incomplete",
       "exitCode": 2,
-      "reasonsInclude": ["partially_verified"]
+      "reasonsInclude": [
+        "partially_verified"
+      ]
     }
   },
   {
@@ -368,10 +941,25 @@
       "runId": "eval-cannot-verify",
       "status": "verified",
       "reviewers": [
-        { "runnerId": "codex:gpt-5", "artifact": "reviews/codex.md" },
-        { "runnerId": "claude:sonnet", "artifact": "reviews/claude.md" }
+        {
+          "runnerId": "codex:gpt-5",
+          "artifact": "reviews/codex.md",
+          "status": "completed"
+        },
+        {
+          "runnerId": "claude:sonnet",
+          "artifact": "reviews/claude.md",
+          "status": "completed"
+        }
       ],
-      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-cannot-verify",
+        "findingSetDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
       "verification": {
         "runnerId": "claude:verifier",
         "status": "cannot_verify",
@@ -382,12 +970,393 @@
         "cannotVerifyCount": 0
       },
       "findings": [],
-      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ]
     },
     "expected": {
       "status": "incomplete",
       "exitCode": 2,
-      "reasonsInclude": ["cannot_verify"]
+      "reasonsInclude": [
+        "cannot_verify"
+      ]
+    }
+  },
+  {
+    "name": "unparsed human decision artifact blocks gate",
+    "manifest": {
+      "runId": "eval-decision-unparsed",
+      "status": "verified",
+      "reviewers": [
+        {
+          "runnerId": "codex:gpt-5",
+          "artifact": "reviews/codex.md",
+          "status": "completed"
+        },
+        {
+          "runnerId": "claude:sonnet",
+          "artifact": "reviews/claude.md",
+          "status": "completed"
+        }
+      ],
+      "humanDecision": {
+        "artifact": "decision.md",
+        "owner": "kai",
+        "status": "unparsed"
+      },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "verified",
+        "artifact": "verify.md"
+      },
+      "findings": [],
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ]
+    },
+    "expected": {
+      "status": "incomplete",
+      "exitCode": 2,
+      "reasonsInclude": [
+        "human decision artifact is unparsed"
+      ]
+    }
+  },
+  {
+    "name": "human decision from another run cannot be replayed",
+    "manifest": {
+      "runId": "eval-decision-run-mismatch",
+      "status": "verified",
+      "reviewers": [
+        {
+          "runnerId": "codex:gpt-5",
+          "artifact": "reviews/codex.md",
+          "status": "completed"
+        },
+        {
+          "runnerId": "claude:sonnet",
+          "artifact": "reviews/claude.md",
+          "status": "completed"
+        }
+      ],
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-some-other-run",
+        "findingSetDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "verified",
+        "artifact": "verify.md"
+      },
+      "findings": [],
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ]
+    },
+    "expected": {
+      "status": "incomplete",
+      "exitCode": 2,
+      "reasonsInclude": [
+        "human decision runId eval-some-other-run does not match run eval-decision-run-mismatch"
+      ]
+    }
+  },
+  {
+    "name": "human decision taken against a stale finding set blocks gate",
+    "manifest": {
+      "runId": "eval-decision-digest-stale",
+      "status": "verified",
+      "reviewers": [
+        {
+          "runnerId": "codex:gpt-5",
+          "artifact": "reviews/codex.md",
+          "status": "completed"
+        },
+        {
+          "runnerId": "claude:sonnet",
+          "artifact": "reviews/claude.md",
+          "status": "completed"
+        }
+      ],
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-decision-digest-stale",
+        "findingSetDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "verified",
+        "artifact": "verify.md"
+      },
+      "findings": [
+        {
+          "id": "QF-001",
+          "sourceRunnerId": "codex:gpt-5",
+          "status": "risk_accepted",
+          "decisionReason": "accepted"
+        }
+      ],
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ]
+    },
+    "expected": {
+      "status": "incomplete",
+      "exitCode": 2,
+      "reasonsInclude": [
+        "human decision findingSetDigest does not match the current finding set"
+      ]
+    }
+  },
+  {
+    "name": "finding the human never ruled on blocks gate",
+    "manifest": {
+      "runId": "eval-finding-unchecked",
+      "status": "verified",
+      "reviewers": [
+        {
+          "runnerId": "codex:gpt-5",
+          "artifact": "reviews/codex.md",
+          "status": "completed"
+        },
+        {
+          "runnerId": "claude:sonnet",
+          "artifact": "reviews/claude.md",
+          "status": "completed"
+        }
+      ],
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-finding-unchecked",
+        "findingSetDigest": "sha256:48c96e982ed9ae750bee9ff339e85cd32569ee146d6c18fa3bdcc1a54f49491b",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "verified",
+        "artifact": "verify.md",
+        "coveredFindingIds": [
+          "QF-001"
+        ],
+        "uncoveredOpenFindingIds": [],
+        "disputedFindings": []
+      },
+      "findings": [
+        {
+          "id": "QF-001",
+          "sourceRunnerId": "claude:sonnet",
+          "status": "unchecked"
+        }
+      ],
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ]
+    },
+    "expected": {
+      "status": "incomplete",
+      "exitCode": 2,
+      "reasonsInclude": [
+        "unresolved findings: QF-001"
+      ]
+    }
+  },
+  {
+    "name": "finding with no source runner is invalid",
+    "manifest": {
+      "runId": "eval-finding-without-source",
+      "status": "verified",
+      "reviewers": [
+        {
+          "runnerId": "codex:gpt-5",
+          "artifact": "reviews/codex.md",
+          "status": "completed"
+        },
+        {
+          "runnerId": "claude:sonnet",
+          "artifact": "reviews/claude.md",
+          "status": "completed"
+        }
+      ],
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-finding-without-source",
+        "findingSetDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "verified",
+        "artifact": "verify.md"
+      },
+      "findings": [
+        {
+          "id": "QF-001",
+          "status": "verified"
+        }
+      ],
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ]
+    },
+    "expected": {
+      "status": "invalid_artifact",
+      "exitCode": 1,
+      "reasonsInclude": [
+        "findings[0] has no source runner"
+      ]
+    }
+  },
+  {
+    "name": "cancelled manifest is a terminal failure",
+    "manifest": {
+      "runId": "eval-cancelled",
+      "status": "cancelled",
+      "reviewers": [],
+      "findings": [],
+      "requiredChecks": []
+    },
+    "expected": {
+      "status": "failed",
+      "exitCode": 1,
+      "reasonsInclude": [
+        "manifest status is cancelled"
+      ]
+    }
+  },
+  {
+    "name": "test blocked manifest is a terminal failure",
+    "manifest": {
+      "runId": "eval-test-blocked",
+      "status": "test_blocked",
+      "reviewers": [],
+      "findings": [],
+      "requiredChecks": []
+    },
+    "expected": {
+      "status": "failed",
+      "exitCode": 1,
+      "reasonsInclude": [
+        "manifest status is test_blocked"
+      ]
+    }
+  },
+  {
+    "name": "unknown manifest status is invalid",
+    "manifest": {
+      "runId": "eval-unknown-status",
+      "status": "completed",
+      "reviewers": [],
+      "findings": [],
+      "requiredChecks": []
+    },
+    "expected": {
+      "status": "invalid_artifact",
+      "exitCode": 1,
+      "reasonsInclude": [
+        "status must be one of"
+      ]
+    }
+  },
+  {
+    "name": "zero minimum reviewers policy is invalid",
+    "policy": {
+      "minReviewers": 0
+    },
+    "manifest": {
+      "runId": "eval-zero-min-reviewers",
+      "status": "verified",
+      "reviewers": [],
+      "findings": [],
+      "requiredChecks": []
+    },
+    "expected": {
+      "status": "invalid_artifact",
+      "exitCode": 1,
+      "reasonsInclude": [
+        "policy.minReviewers must be an integer greater than or equal to 1"
+      ]
+    }
+  },
+  {
+    "name": "changeset review without a usable frozen changeset blocks the gate",
+    "manifest": {
+      "runId": "eval-changeset-not-frozen",
+      "status": "verified",
+      "reviewers": [
+        {
+          "runnerId": "codex:gpt-5",
+          "artifact": "reviews/codex.md",
+          "status": "completed"
+        },
+        {
+          "runnerId": "claude:sonnet",
+          "artifact": "reviews/claude.md",
+          "status": "completed"
+        }
+      ],
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-clean-release",
+        "findingSetDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "verified",
+        "artifact": "verify.md"
+      },
+      "findings": [],
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ],
+      "context": {
+        "changeset": {
+          "artifact": "context/changeset.json",
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "available": false
+        }
+      }
+    },
+    "expected": {
+      "status": "incomplete",
+      "exitCode": 2,
+      "reasonsInclude": [
+        "frozen changeset is required and is not usable"
+      ]
     }
   }
 ]

@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { devNull } from "node:os";
 import { promisify } from "node:util";
+import { resolveDeterministicGitEnv } from "./git-env.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -15,19 +16,24 @@ export async function computeChangeset({
   projectRoot,
   base = "HEAD",
   head = "WORKTREE",
-  maxPatchBytes = DEFAULT_MAX_PATCH_BYTES
+  maxPatchBytes = DEFAULT_MAX_PATCH_BYTES,
+  generatedAt = new Date().toISOString()
 } = {}) {
-  const generatedAt = new Date().toISOString();
-
   if (!projectRoot || typeof projectRoot !== "string") {
     return unavailable({ base, head, generatedAt, reason: "projectRoot is required" });
   }
 
+  const { env: gitEnv, degraded: deterministicEnvDegraded } = resolveDeterministicGitEnv();
+
+  // The determinism knobs are split across two channels on purpose: quotepath is
+  // an argv flag because it must be visible in the invocation contract, while the
+  // rest is neutralized by nullifying global and system config through the env
+  // rather than by whitelisting individual settings.
   const git = async (gitArgs) => {
     const { stdout } = await execFileAsync(
       "git",
       ["-c", "core.quotepath=false", ...gitArgs],
-      { cwd: projectRoot, maxBuffer: GIT_MAX_BUFFER }
+      { cwd: projectRoot, env: gitEnv, maxBuffer: GIT_MAX_BUFFER }
     );
     return stdout;
   };
@@ -106,6 +112,7 @@ export async function computeChangeset({
       baseSha,
       headSha,
       dirty: isWorktree,
+      deterministicEnvDegraded,
       fileCount: files.length,
       files,
       totals,

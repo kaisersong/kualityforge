@@ -12,8 +12,13 @@ import {
   synthesizeArtifactRoot,
   writeReviewFileToArtifactRoot
 } from "./artifact-operations.mjs";
-import { reduceQualityGate } from "./gate-reducer.mjs";
-import { deriveRole, isReviewPolicyEnabled, validateReviewPolicyShape } from "./review-policy.mjs";
+import { loadGateInputFromArtifactRoot } from "./gate-input.mjs";
+import { changesetRequired, changesetUsable } from "./changeset-usability.mjs";
+import {
+  classifyReviewerExecution,
+  isReviewPolicyEnabled,
+  validateReviewPolicyShape
+} from "./review-policy.mjs";
 import {
   KSWARM_RUNTIME_PLAN_KIND,
   assignFocusPatterns,
@@ -98,11 +103,15 @@ export async function runKswarmBrokeredRuntimePlan(options = {}) {
     throw new Error("startScriptWorkflowRunFromProposal failed: workflowRun.id is required");
   }
 
-  await initializeArtifactRoot(runtimePlan.artifactRoot, {
-    runId: runtimePlan.runId,
-    profile: runtimePlan.profile || "release",
-    context: createContextOptions(runtimePlan)
-  });
+  const { manifest: initialManifest, contextFiles, changeset } = await initializeArtifactRoot(
+    runtimePlan.artifactRoot,
+    {
+      runId: runtimePlan.runId,
+      profile: runtimePlan.profile || "release",
+      context: createContextOptions(runtimePlan)
+    }
+  );
+  assertDispatchContext(runtimePlan.reviewType, initialManifest.context, changeset);
 
   const parallelOperation = runtimePlan.operations.find((operation) => operation.type === "begin_parallel_group");
   const parallelGroupResult = await kswarmClient.beginWorkflowScriptParallelGroup(projectId, workflowRunId, {
@@ -119,13 +128,11 @@ export async function runKswarmBrokeredRuntimePlan(options = {}) {
   }
 
   const expectedReviewers = [];
-  // Load structure-scan to enable conditional prompt and focus pattern specialization
-  let hasStructureScan = false;
+  // Load structure-scan to enable conditional focus pattern specialization
   let focusAssignment = null;
   const structureScanPath = join(runtimePlan.artifactRoot, "context", "structure-scan.json");
   try {
     const scanData = JSON.parse(await readFile(structureScanPath, "utf8"));
-    hasStructureScan = true;
     if (Array.isArray(scanData.suspiciousPatterns) && scanData.suspiciousPatterns.length > 0) {
       focusAssignment = assignFocusPatterns(scanData.suspiciousPatterns, runtimePlan.reviewers);
     }
@@ -134,8 +141,11 @@ export async function runKswarmBrokeredRuntimePlan(options = {}) {
   }
 
   for (const reviewer of runtimePlan.reviewers) {
-    const role = requiredSet ? deriveRole(reviewer.runnerId, requiredSet) : "required";
-    const quorumMember = quorumSet ? quorumSet.has(reviewer.runnerId) : true;
+    const {
+      role,
+      required,
+      quorumMember
+    } = classifyReviewerExecution(reviewer.runnerId, requiredSet, quorumSet);
     const nodeInput = createKswarmReviewerNodeInput({
       runId: runtimePlan.runId,
       artifactRoot: runtimePlan.artifactRoot,
@@ -145,10 +155,10 @@ export async function runKswarmBrokeredRuntimePlan(options = {}) {
       parallelGroupId,
       reviewerRole: role,
       quorumMember,
-      required: role === "required",
+      required,
       lang: options.lang,
       reviewType: runtimePlan.reviewType || null,
-      hasStructureScan,
+      contextFiles,
       focusPatterns: focusAssignment ? focusAssignment.get(reviewer.runnerId) || null : null
     });
     const dispatched = await kswarmClient.dispatchWorkflowScriptAgentNode(projectId, workflowRunId, nodeInput);
@@ -161,6 +171,7 @@ export async function runKswarmBrokeredRuntimePlan(options = {}) {
       reviewer,
       nodeId,
       role,
+      required,
       quorumMember,
       attempt: dispatchInfo?.attempt,
       handoffId: dispatchInfo?.handoffId,
@@ -172,10 +183,9 @@ export async function runKswarmBrokeredRuntimePlan(options = {}) {
   const startedAt = now();
   let workflowRun = null;
   for (;;) {
-    const runResult = await kswarmClient.getWorkflowRun(projectId, workflowRunId);
-    workflowRun = runResult?.workflowRun || null;
-    const ready = allNodesTerminal(workflowRun, expectedNodeIds);
-    if (ready) {
+    const poll = await pollOnce({ kswarmClient, projectId, workflowRunId, expectedNodeIds });
+    workflowRun = poll.workflowRun;
+    if (poll.done) {
       break;
     }
     if (now() - startedAt >= timeoutMs) {
@@ -189,126 +199,95 @@ export async function runKswarmBrokeredRuntimePlan(options = {}) {
   const nodeStatusMap = buildNodeStatusMap(workflowRun, expectedNodeIds);
 
   const reviewerResults = [];
-  let reviewOutcomes = null;
+  const reviewOutcomes = reviewPolicy ? [] : null;
 
-  if (!reviewPolicy) {
-    for (const entry of expectedReviewers) {
-      const nodeStatus = nodeStatusMap.get(entry.nodeId);
-      if (nodeStatus === "blocked" || nodeStatus === "failed") {
-        // Reviewer unavailable — skip it, continue with completed reviewers
-        continue;
-      }
-      const artifactPath = join(runtimePlan.artifactRoot, entry.outputArtifact);
-      try {
-        await access(artifactPath);
-      } catch {
+  for (const entry of expectedReviewers) {
+    const runnerId = entry.reviewer.runnerId;
+    const nodeStatus = nodeStatusMap.get(entry.nodeId);
+    const artifactPath = join(runtimePlan.artifactRoot, entry.outputArtifact);
+
+    if (nodeStatus === "failed" || nodeStatus === "blocked") {
+      if (entry.required) {
         throw new Error(
-          `reviewer ${entry.reviewer.runnerId} node completed but artifact is missing: ${entry.outputArtifact}`
+          `required reviewer ${runnerId} node ${nodeStatus}; stopping without completing the run`
         );
       }
-      const artifact = await writeReviewFileToArtifactRoot(runtimePlan.artifactRoot, artifactPath, {
-        expectedRunnerId: entry.reviewer.runnerId,
+      reviewOutcomes.push({
+        runnerId,
+        role: entry.role,
+        quorumMember: entry.quorumMember,
+        nodeId: entry.nodeId,
+        status: "failed",
+        absenceReason: `node ${nodeStatus}`
+      });
+      continue;
+    }
+
+    let hasArtifact = true;
+    try {
+      await access(artifactPath);
+    } catch {
+      hasArtifact = false;
+    }
+
+    if (!hasArtifact) {
+      if (entry.required) {
+        throw new Error(
+          `required reviewer ${runnerId} node completed but artifact is missing: ${entry.outputArtifact}`
+        );
+      }
+      reviewOutcomes.push({
+        runnerId,
+        role: entry.role,
+        quorumMember: entry.quorumMember,
+        nodeId: entry.nodeId,
+        status: "skipped",
+        absenceReason: "node completed but artifact is missing"
+      });
+      continue;
+    }
+
+    let artifact;
+    try {
+      artifact = await writeReviewFileToArtifactRoot(runtimePlan.artifactRoot, artifactPath, {
+        expectedRunnerId: runnerId,
         artifact: entry.outputArtifact
       });
-      if (artifact.isVacuous) {
+    } catch (error) {
+      if (/runnerId mismatch/.test(error.message) || entry.required) {
+        throw error;
+      }
+      reviewOutcomes.push({
+        runnerId,
+        role: entry.role,
+        quorumMember: entry.quorumMember,
+        nodeId: entry.nodeId,
+        status: "failed",
+        absenceReason: `artifact parse failure: ${error.message}`
+      });
+      continue;
+    }
+
+    if (artifact.isVacuous) {
+      if (entry.required) {
         throw new Error(
-          `required reviewer ${entry.reviewer.runnerId} produced vacuous output (no substantive findings)`
+          `required reviewer ${runnerId} produced vacuous output (no substantive findings)`
         );
       }
-      reviewerResults.push({ reviewer: entry.reviewer, nodeId: entry.nodeId, artifact });
+      reviewOutcomes.push({
+        runnerId,
+        role: entry.role,
+        quorumMember: entry.quorumMember,
+        nodeId: entry.nodeId,
+        status: "skipped",
+        absenceReason: "reviewer produced vacuous output (no substantive findings)"
+      });
+      continue;
     }
-  } else {
-    const outcomes = [];
-    for (const entry of expectedReviewers) {
-      const runnerId = entry.reviewer.runnerId;
-      const nodeStatus = nodeStatusMap.get(entry.nodeId);
-      const isRequired = entry.role === "required";
-      const artifactPath = join(runtimePlan.artifactRoot, entry.outputArtifact);
 
-      if (nodeStatus === "failed" || nodeStatus === "blocked") {
-        if (isRequired) {
-          throw new Error(
-            `required reviewer ${runnerId} node ${nodeStatus}; stopping without completing the run`
-          );
-        }
-        outcomes.push({
-          runnerId,
-          role: entry.role,
-          quorumMember: entry.quorumMember,
-          nodeId: entry.nodeId,
-          status: "failed",
-          absenceReason: `node ${nodeStatus}`
-        });
-        continue;
-      }
-
-      let hasArtifact = true;
-      try {
-        await access(artifactPath);
-      } catch {
-        hasArtifact = false;
-      }
-
-      if (!hasArtifact) {
-        if (isRequired) {
-          throw new Error(
-            `required reviewer ${runnerId} node completed but artifact is missing: ${entry.outputArtifact}`
-          );
-        }
-        outcomes.push({
-          runnerId,
-          role: entry.role,
-          quorumMember: entry.quorumMember,
-          nodeId: entry.nodeId,
-          status: "skipped",
-          absenceReason: "node completed but artifact is missing"
-        });
-        continue;
-      }
-
-      let artifact;
-      try {
-        artifact = await writeReviewFileToArtifactRoot(runtimePlan.artifactRoot, artifactPath, {
-          expectedRunnerId: runnerId,
-          artifact: entry.outputArtifact
-        });
-      } catch (error) {
-        if (/runnerId mismatch/.test(error.message)) {
-          throw error;
-        }
-        if (isRequired) {
-          throw error;
-        }
-        outcomes.push({
-          runnerId,
-          role: entry.role,
-          quorumMember: entry.quorumMember,
-          nodeId: entry.nodeId,
-          status: "failed",
-          absenceReason: `artifact parse failure: ${error.message}`
-        });
-        continue;
-      }
-
-      if (artifact.isVacuous) {
-        if (isRequired) {
-          throw new Error(
-            `required reviewer ${runnerId} produced vacuous output (no substantive findings)`
-          );
-        }
-        outcomes.push({
-          runnerId,
-          role: entry.role,
-          quorumMember: entry.quorumMember,
-          nodeId: entry.nodeId,
-          status: "skipped",
-          absenceReason: "reviewer produced vacuous output (no substantive findings)"
-        });
-        continue;
-      }
-
-      reviewerResults.push({ reviewer: entry.reviewer, nodeId: entry.nodeId, artifact });
-      outcomes.push({
+    reviewerResults.push({ reviewer: entry.reviewer, nodeId: entry.nodeId, artifact });
+    if (reviewOutcomes) {
+      reviewOutcomes.push({
         runnerId,
         role: entry.role,
         quorumMember: entry.quorumMember,
@@ -316,10 +295,11 @@ export async function runKswarmBrokeredRuntimePlan(options = {}) {
         status: "succeeded"
       });
     }
+  }
 
-    outcomes.sort((a, b) => a.runnerId.localeCompare(b.runnerId));
-    reviewOutcomes = outcomes;
-    await persistReviewMetadata(runtimePlan.artifactRoot, reviewPolicy, outcomes);
+  if (reviewPolicy) {
+    reviewOutcomes.sort((a, b) => a.runnerId.localeCompare(b.runnerId));
+    await persistReviewMetadata(runtimePlan.artifactRoot, reviewPolicy, reviewOutcomes);
   }
 
   const synthesis = await synthesizeArtifactRoot(runtimePlan.artifactRoot, { lang: options.lang });
@@ -330,11 +310,15 @@ export async function runKswarmBrokeredRuntimePlan(options = {}) {
   }
   let decision = null;
   if (typeof decisionProvider === "function") {
-    const markdown = normalizeMarkdownResult(
-      await decisionProvider({ artifactRoot: runtimePlan.artifactRoot, summaryArtifact: synthesis.artifact, runtimePlan }),
-      "decisionProvider"
-    );
-    decision = await recordDecisionMarkdown(runtimePlan.artifactRoot, markdown);
+    const decisionOutput = await decisionProvider({
+      artifactRoot: runtimePlan.artifactRoot,
+      summaryArtifact: synthesis.artifact,
+      runtimePlan
+    });
+    const markdown = normalizeMarkdownResult(decisionOutput, "decisionProvider");
+    decision = await recordDecisionMarkdown(runtimePlan.artifactRoot, markdown, {
+      owner: decisionOutput?.owner || effectivePreview.requestedBy || "human"
+    });
   }
 
   const checkOperation = runtimePlan.operations.find((operation) => operation.type === "run_required_checks");
@@ -353,13 +337,11 @@ export async function runKswarmBrokeredRuntimePlan(options = {}) {
     const verifierOutput = await verifierRunner({ artifactRoot: runtimePlan.artifactRoot, runtimePlan });
     const markdown = normalizeMarkdownResult(verifierOutput, "verifierRunner");
     verification = await recordVerificationMarkdown(runtimePlan.artifactRoot, markdown, {
-      runnerId: verifierOutput.runnerId,
-      status: verifierOutput.status || "verified"
+      runnerId: verifierOutput.runnerId
     });
   }
 
-  const { manifest } = await loadManifestFromArtifactRoot(runtimePlan.artifactRoot);
-  const gate = reduceQualityGate(manifest, options.policy);
+  const { manifest, gate } = await loadGateInputFromArtifactRoot(runtimePlan.artifactRoot, options.policy);
   const terminal = mapGateResultToKswarmTerminal(gate, { artifactRoot: runtimePlan.artifactRoot });
   const completionResult = buildKswarmGateResult(gate, runtimePlan.artifactRoot, manifest);
   const completion = await kswarmClient.completeScriptWorkflowRun(projectId, workflowRunId, {
@@ -428,18 +410,42 @@ export function buildKswarmGateResult(gate, artifactRoot, manifest = {}) {
   };
 }
 
-function allNodesTerminal(workflowRun, expectedNodeIds) {
-  if (!workflowRun || expectedNodeIds.size === 0) {
-    return false;
-  }
-  const nodes = Array.isArray(workflowRun.nodes) ? workflowRun.nodes : [];
-  const terminal = new Set();
-  for (const node of nodes) {
-    if (node && expectedNodeIds.has(node.id) && ["completed", "failed", "blocked"].includes(node.status)) {
-      terminal.add(node.id);
+// One poll step, exported so the loop's termination conditions are assertable
+// without racing a real timer. An empty expectation set is never done: no
+// dispatched reviewer means no evidence, not universal completion.
+export async function pollOnce({ kswarmClient, projectId, workflowRunId, expectedNodeIds }) {
+  const runResult = await kswarmClient.getWorkflowRun(projectId, workflowRunId);
+  const workflowRun = runResult?.workflowRun || null;
+  const statuses = buildNodeStatusMap(workflowRun, expectedNodeIds);
+
+  const completed = [];
+  const failed = [];
+  const blocked = [];
+  const pending = [];
+  for (const nodeId of expectedNodeIds) {
+    switch (statuses.get(nodeId)) {
+      case "completed":
+        completed.push(nodeId);
+        break;
+      case "failed":
+        failed.push(nodeId);
+        break;
+      case "blocked":
+        blocked.push(nodeId);
+        break;
+      default:
+        pending.push(nodeId);
     }
   }
-  return terminal.size === expectedNodeIds.size;
+
+  return {
+    workflowRun,
+    done: expectedNodeIds.size > 0 && pending.length === 0,
+    completed,
+    failed,
+    blocked,
+    pending
+  };
 }
 
 function buildNodeStatusMap(workflowRun, expectedNodeIds) {
@@ -471,6 +477,21 @@ async function persistReviewMetadata(artifactRoot, reviewPolicy, reviewOutcomes)
   });
 }
 
+function assertDispatchContext(reviewType, context, changeset) {
+  if (changesetRequired(reviewType)) {
+    if (!changesetUsable(changeset).usable) {
+      throw new Error("frozen changeset is required and is not usable");
+    }
+    return;
+  }
+  if (!context?.projectContext?.artifact) {
+    throw new Error("full-project review requires a projectContext artifact");
+  }
+  if (!context?.projectBrief?.artifact) {
+    throw new Error("full-project review requires a projectBrief artifact");
+  }
+}
+
 function createContextOptions(runtimePlan) {
   if (
     !runtimePlan.projectRoot &&
@@ -487,6 +508,7 @@ function createContextOptions(runtimePlan) {
     docsRoots: runtimePlan.docsRoots || [],
     qualityPrinciplesPath: runtimePlan.qualityPrinciplesPath,
     changeGoal: runtimePlan.changeGoal,
+    generatedAt: runtimePlan.contextGeneratedAt,
     ...(runtimePlan.changeset ? { changeset: runtimePlan.changeset } : {}),
     enableStructureScan: true,
     ...(runtimePlan.reviewType ? { reviewType: runtimePlan.reviewType } : {})

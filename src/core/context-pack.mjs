@@ -2,34 +2,38 @@ import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { buildChangesetJson, computeChangeset, renderChangesetMarkdown } from "./changeset.mjs";
+import { toProtocolPath } from "./artifact-path-format.mjs";
+import { CONTEXT_DIR, CONTEXT_FILES, contextArtifactPath } from "./context-vocabulary.mjs";
+import { resolveDeterministicGitEnv } from "./git-env.mjs";
+import { computeSuspiciousPatterns } from "./suspicious-patterns.mjs";
 
 const execFileAsync = promisify(execFile);
 
-const SUSPICIOUS_PATTERNS = [
-  { label: "eval()", regex: /eval\s*\(/ },
-  { label: "innerHTML", regex: /innerHTML/ },
-  { label: "dangerouslySetInnerHTML", regex: /dangerouslySetInnerHTML/ },
-  { label: "document.write", regex: /document\.write/ },
-  { label: "TODO", regex: /TODO/ },
-  { label: "FIXME", regex: /FIXME/ },
-  { label: "HACK", regex: /HACK/ },
-  { label: "console.log", regex: /console\.log/ },
-  { label: "any type", regex: /:\s*any\b/ },
-  { label: "ts-ignore", regex: /\/\/\s*@ts-ignore/ },
-  { label: "ts-nocheck", regex: /\/\/\s*@ts-nocheck/ }
-];
-
-const DEFAULT_SCAN_INCLUDE = ["**/*.ts", "**/*.js", "**/*.tsx", "**/*.jsx", "**/*.mjs", "**/*.cjs"];
-const DEFAULT_SCAN_EXCLUDE = ["**/node_modules/**", "**/dist/**", "**/.git/**", "**/coverage/**", "**/*.min.*"];
+// The frozen name of one instruction file. The digest is unconditional: making it
+// conditional lets a file literally named like an already-digested product collide
+// with the product of a different name. The input is the file's path relative to the
+// project root, not its basename, so the same basename under two packages stays
+// distinct and the same file written five different ways stays identical.
+export function instructionArtifactName(projectRelativePath) {
+  const nfc = String(projectRelativePath).normalize("NFC");
+  const digest = createHash("sha256").update(Buffer.from(nfc, "utf8")).digest("hex").slice(0, 32);
+  const stem = nfc
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^[-.]+/, "")
+    .replace(/[-.]+$/, "")
+    .slice(0, 80);
+  return `${stem === "" ? "file" : stem}-${digest}`;
+}
 
 export async function buildContextPack(artifactRoot, options = {}) {
   if (!artifactRoot || typeof artifactRoot !== "string") {
     throw new Error("artifactRoot is required");
   }
 
-  const contextRoot = join(artifactRoot, "context");
+  const generatedAt = options.generatedAt || new Date().toISOString();
+  const contextRoot = join(artifactRoot, CONTEXT_DIR);
   const instructionsRoot = join(contextRoot, "instructions");
   await mkdir(instructionsRoot, { recursive: true });
 
@@ -47,31 +51,49 @@ export async function buildContextPack(artifactRoot, options = {}) {
     qualityPrinciples = JSON.parse(qualityPrinciplesContent);
     await writeContextFile(
       contextRoot,
-      "quality-principles.json",
+      CONTEXT_FILES.qualityPrinciplesJson,
       `${JSON.stringify(qualityPrinciples, null, 2)}\n`,
       files
     );
     await writeContextFile(
       contextRoot,
-      "quality-principles.md",
+      CONTEXT_FILES.qualityPrinciplesMarkdown,
       renderQualityPrinciplesMarkdown(qualityPrinciples),
       files
     );
   }
 
   const copiedInstructions = [];
+  const plannedInstructions = [];
+  const claimedArtifacts = new Map();
   for (const instructionFile of instructionFiles) {
     if (!projectRoot || !projectRootRealpath) {
       throw new Error("projectRoot is required when instructionFiles are provided");
     }
 
     const source = await resolveProjectFile(projectRootRealpath, instructionFile, "instruction file");
-    const content = await readFile(source, "utf8");
-    const artifact = join("instructions", basename(instructionFile));
-    await writeContextFile(contextRoot, artifact, content, files);
+    const projectRelativePath = toProtocolPath(relative(projectRootRealpath, source));
+    // Computed once, here, and handed to every consumer below. Normalizing inside
+    // writeContextFile could not reach this local, so on Windows the same artifact
+    // would end up with one spelling in the file table and another in the brief.
+    const artifact = toProtocolPath(join("instructions", instructionArtifactName(projectRelativePath)));
+
+    const claimedBy = claimedArtifacts.get(artifact);
+    if (claimedBy !== undefined && claimedBy !== projectRelativePath) {
+      throw new Error(
+        `instruction files ${claimedBy} and ${projectRelativePath} map to the same artifact ${artifact}`
+      );
+    }
+    claimedArtifacts.set(artifact, projectRelativePath);
+    plannedInstructions.push({ instructionFile, source, artifact });
+  }
+
+  for (const planned of plannedInstructions) {
+    const content = await readFile(planned.source, "utf8");
+    await writeContextFile(contextRoot, planned.artifact, content, files);
     copiedInstructions.push({
-      path: instructionFile,
-      artifact: join("context", artifact),
+      path: planned.instructionFile,
+      artifact: contextArtifactPath(planned.artifact),
       required: true
     });
   }
@@ -83,6 +105,7 @@ export async function buildContextPack(artifactRoot, options = {}) {
     docsRoots,
     instructionFiles: copiedInstructions,
     designEntrypoints,
+    reviewType: options.reviewType === "full-project" ? "full-project" : "changeset",
     changeGoal: options.changeGoal || "",
     nonGoals: options.nonGoals || [],
     relatedRepos: options.relatedRepos || [],
@@ -91,7 +114,7 @@ export async function buildContextPack(artifactRoot, options = {}) {
 
   await writeContextFile(
     contextRoot,
-    "project-context.json",
+    CONTEXT_FILES.projectContext,
     `${JSON.stringify(projectContext, null, 2)}\n`,
     files
   );
@@ -103,32 +126,42 @@ export async function buildContextPack(artifactRoot, options = {}) {
       projectRoot: projectRootRealpath,
       base: changesetOptions.base,
       head: changesetOptions.head,
-      maxPatchBytes: changesetOptions.maxPatchBytes
+      maxPatchBytes: changesetOptions.maxPatchBytes,
+      generatedAt
     });
     await writeContextFile(
       contextRoot,
-      "changeset.json",
+      CONTEXT_FILES.changesetJson,
       `${JSON.stringify(buildChangesetJson(changeset), null, 2)}\n`,
       files
     );
-    await writeContextFile(contextRoot, "changeset.md", renderChangesetMarkdown(changeset), files);
+    await writeContextFile(
+      contextRoot,
+      CONTEXT_FILES.changesetMarkdown,
+      renderChangesetMarkdown(changeset),
+      files
+    );
   }
 
   let structureScan = null;
   const shouldScan = options.enableStructureScan || options.reviewType === "full-project";
   if (projectRootRealpath && shouldScan) {
     structureScan = await computeStructureScan(projectRootRealpath, {
-      includePatterns: options.structureScanPatterns || DEFAULT_SCAN_INCLUDE,
-      excludePatterns: options.structureScanExclude || DEFAULT_SCAN_EXCLUDE,
-      maxFiles: options.structureScanMaxFiles || 500
+      maxFiles: options.structureScanMaxFiles || 500,
+      generatedAt
     });
     await writeContextFile(
       contextRoot,
-      "structure-scan.json",
+      CONTEXT_FILES.structureScanJson,
       `${JSON.stringify(structureScan, null, 2)}\n`,
       files
     );
-    await writeContextFile(contextRoot, "structure-scan.md", renderStructureScanMarkdown(structureScan), files);
+    await writeContextFile(
+      contextRoot,
+      CONTEXT_FILES.structureScanMarkdown,
+      renderStructureScanMarkdown(structureScan),
+      files
+    );
   }
 
   const docsIndex = {
@@ -138,71 +171,74 @@ export async function buildContextPack(artifactRoot, options = {}) {
   };
   await writeContextFile(
     contextRoot,
-    "docs-index.json",
+    CONTEXT_FILES.docsIndex,
     `${JSON.stringify(docsIndex, null, 2)}\n`,
     files
   );
 
   await writeContextFile(
     contextRoot,
-    "project-brief.md",
+    CONTEXT_FILES.projectBrief,
     renderProjectBrief({ projectContext, qualityPrinciples, changeset }),
     files
   );
 
   const contextManifest = {
     schemaVersion: 1,
-    generatedAt: options.generatedAt || new Date().toISOString(),
+    generatedAt,
     files
   };
   await writeContextFile(
     contextRoot,
-    "context-manifest.json",
+    CONTEXT_FILES.contextManifest,
     `${JSON.stringify(contextManifest, null, 2)}\n`,
     files
   );
 
-  const contextManifestContent = await readFile(join(contextRoot, "context-manifest.json"), "utf8");
-  const contextManifestHash = sha256(contextManifestContent);
+  // Hashed over the bytes on disk, not over the string that produced them, so the
+  // digest a reviewer recomputes from the file is the digest recorded here.
+  const contextManifestBytes = await readFile(join(contextRoot, CONTEXT_FILES.contextManifest));
+  const contextManifestHash = sha256(contextManifestBytes);
 
   return {
     artifacts: {
       contextManifest: {
-        artifact: "context/context-manifest.json",
+        artifact: contextArtifactPath(CONTEXT_FILES.contextManifest),
         sha256: contextManifestHash
       },
       qualityPrinciples: qualityPrinciples
         ? {
-            artifact: "context/quality-principles.json",
-            sha256: files["quality-principles.json"].sha256
+            artifact: contextArtifactPath(CONTEXT_FILES.qualityPrinciplesJson),
+            sha256: files[CONTEXT_FILES.qualityPrinciplesJson].sha256
           }
         : null,
       projectContext: {
-        artifact: "context/project-context.json",
-        sha256: files["project-context.json"].sha256
+        artifact: contextArtifactPath(CONTEXT_FILES.projectContext),
+        sha256: files[CONTEXT_FILES.projectContext].sha256
       },
       projectBrief: {
-        artifact: "context/project-brief.md",
-        sha256: files["project-brief.md"].sha256
+        artifact: contextArtifactPath(CONTEXT_FILES.projectBrief),
+        sha256: files[CONTEXT_FILES.projectBrief].sha256
       },
       docsIndex: {
-        artifact: "context/docs-index.json",
-        sha256: files["docs-index.json"].sha256
+        artifact: contextArtifactPath(CONTEXT_FILES.docsIndex),
+        sha256: files[CONTEXT_FILES.docsIndex].sha256
       },
-      changeset: files["changeset.json"]
+      changeset: files[CONTEXT_FILES.changesetJson]
         ? {
-            artifact: "context/changeset.json",
-            sha256: files["changeset.json"].sha256
+            artifact: contextArtifactPath(CONTEXT_FILES.changesetJson),
+            sha256: files[CONTEXT_FILES.changesetJson].sha256
           }
         : null,
-      structureScan: files["structure-scan.json"]
+      structureScan: files[CONTEXT_FILES.structureScanJson]
         ? {
-            artifact: "context/structure-scan.json",
-            sha256: files["structure-scan.json"].sha256
+            artifact: contextArtifactPath(CONTEXT_FILES.structureScanJson),
+            sha256: files[CONTEXT_FILES.structureScanJson].sha256
           }
         : null
     },
     contextManifest,
+    files,
     projectContext,
     qualityPrinciples,
     changeset,
@@ -258,11 +294,14 @@ function isWithinRoot(root, value) {
 }
 
 async function writeContextFile(contextRoot, artifact, content, files) {
-  await mkdir(dirname(join(contextRoot, artifact)), { recursive: true });
-  await writeFile(join(contextRoot, artifact), content, "utf8");
-  files[artifact] = {
-    artifact: join("context", artifact),
-    sha256: sha256(content)
+  const target = join(contextRoot, artifact);
+  const bytes = Buffer.from(content, "utf8");
+  await mkdir(dirname(target), { recursive: true });
+  await writeFile(target, bytes);
+  const key = toProtocolPath(artifact);
+  files[key] = {
+    artifact: contextArtifactPath(key),
+    sha256: sha256(bytes)
   };
 }
 
@@ -312,6 +351,7 @@ function renderProjectBrief({ projectContext, qualityPrinciples, changeset = nul
   }
   lines.push("");
   lines.push("## Changeset", "");
+  const changesetOnly = projectContext.reviewType !== "full-project";
   if (!changeset || !changeset.available) {
     lines.push(
       changeset?.reason
@@ -324,7 +364,12 @@ function renderProjectBrief({ projectContext, qualityPrinciples, changeset = nul
     lines.push(`- Base: ${changeset.base} (${shortBase})`);
     lines.push(`- Head: ${changeset.head} (${shortHead})`);
     lines.push(`- Files changed: ${changeset.fileCount}`);
-    lines.push("- Evaluate ONLY these files (see context/changeset.md for the full diff):");
+    lines.push(`- Review scope: ${changesetOnly ? "changeset-only" : "full-project"}`);
+    lines.push(
+      changesetOnly
+        ? "- Evaluate ONLY these files (see context/changeset.md for the full diff):"
+        : "- The whole project is in scope. These files are recent changes only, listed as context (see context/changeset.md for the full diff):"
+    );
     if (changeset.files.length === 0) {
       lines.push("  - (no files changed)");
     } else {
@@ -339,13 +384,16 @@ function renderProjectBrief({ projectContext, qualityPrinciples, changeset = nul
 
 export async function computeStructureScan(projectRoot, options = {}) {
   const maxFiles = options.maxFiles || 500;
+  const generatedAt = options.generatedAt || new Date().toISOString();
 
   let fileList = [];
   try {
-    const { stdout } = await execFileAsync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], {
-      cwd: projectRoot,
-      maxBuffer: 16 * 1024 * 1024
-    });
+    const { env } = resolveDeterministicGitEnv();
+    const { stdout } = await execFileAsync(
+      "git",
+      ["-c", "core.quotepath=false", "ls-files", "--cached", "--others", "--exclude-standard"],
+      { cwd: projectRoot, env, maxBuffer: 16 * 1024 * 1024 }
+    );
     fileList = stdout.split("\n").filter(Boolean);
     const srcExts = new Set([".ts", ".js", ".tsx", ".jsx", ".mjs", ".cjs", ".py", ".go"]);
     fileList = fileList.filter((f) => {
@@ -358,45 +406,11 @@ export async function computeStructureScan(projectRoot, options = {}) {
 
   fileList = fileList.slice(0, maxFiles);
 
-  const suspiciousPatterns = [];
-  let useGrep = true;
-  for (const pattern of SUSPICIOUS_PATTERNS) {
-    if (!useGrep) break;
-    try {
-      const { stdout } = await execFileAsync(
-        "grep",
-        ["-rn", "--include=*.ts", "--include=*.js", "--include=*.tsx", "--include=*.jsx", "--include=*.mjs", "--include=*.cjs", "-E", pattern.regex.source, "."],
-        { cwd: projectRoot, maxBuffer: 16 * 1024 * 1024 }
-      );
-      const matches = stdout.split("\n").filter(Boolean);
-      const fileMap = new Map();
-      for (const line of matches) {
-        const colonIdx = line.indexOf(":");
-        if (colonIdx < 0) continue;
-        const filePath = line.slice(0, colonIdx);
-        fileMap.set(filePath, (fileMap.get(filePath) || 0) + 1);
-      }
-      if (fileMap.size > 0) {
-        const files = [...fileMap.entries()]
-          .map(([path, count]) => ({ path, count }))
-          .sort((a, b) => b.count - a.count)
-          .slice(0, 20);
-        const total = [...fileMap.values()].reduce((s, c) => s + c, 0);
-        suspiciousPatterns.push({ pattern: pattern.label, totalOccurrences: total, files });
-      }
-    } catch (error) {
-      if (error.code === "ENOENT") {
-        useGrep = false;
-        break;
-      }
-      // grep exits non-zero when no matches — that's fine
-    }
-  }
-
-  if (!useGrep) {
-    const scanResult = await computeSuspiciousPatternsNode(projectRoot, fileList, SUSPICIOUS_PATTERNS);
-    suspiciousPatterns.push(...scanResult);
-  }
+  // One scanner, not two. The external grep path read JS regex sources as POSIX
+  // ERE, kept its own shorter extension list, applied no directory exclusions while
+  // scanning ".", and is absent on Windows — so the same field meant different
+  // things depending on which path ran.
+  const suspiciousPatterns = await computeSuspiciousPatterns(projectRoot, fileList);
 
   const fileCategories = {};
   for (const file of fileList) {
@@ -410,7 +424,7 @@ export async function computeStructureScan(projectRoot, options = {}) {
 
   return {
     schemaVersion: 1,
-    generatedAt: new Date().toISOString(),
+    generatedAt,
     totalFiles: fileList.length,
     truncated: fileList.length >= maxFiles,
     suspiciousPatterns,
@@ -564,34 +578,7 @@ async function computeSymbolMap(projectRoot, fileList, options = {}) {
   return result;
 }
 
-async function computeSuspiciousPatternsNode(projectRoot, fileList, patterns) {
-  const results = [];
-  for (const pattern of patterns) {
-    const fileMap = new Map();
-    for (const file of fileList) {
-      try {
-        const content = await readFile(join(projectRoot, file), "utf8");
-        const matches = content.match(pattern.regex);
-        if (matches && matches.length > 0) {
-          fileMap.set(file, matches.length);
-        }
-      } catch {
-        // skip unreadable files
-      }
-    }
-    if (fileMap.size > 0) {
-      const files = [...fileMap.entries()]
-        .map(([path, count]) => ({ path, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 20);
-      const total = [...fileMap.values()].reduce((s, c) => s + c, 0);
-      results.push({ pattern: pattern.label, totalOccurrences: total, files });
-    }
-  }
-  return results;
-}
-
-function renderStructureScanMarkdown(scan) {
+export function renderStructureScanMarkdown(scan) {
   const lines = ["# KualityForge Structure Scan", ""];
 
   if (!scan) {
@@ -613,10 +600,13 @@ function renderStructureScanMarkdown(scan) {
     for (const pattern of scan.suspiciousPatterns) {
       lines.push(`### ${pattern.pattern} (${pattern.totalOccurrences} occurrences)`, "");
       for (const file of pattern.files) {
-        lines.push(`- ${file.path} (${file.count}x)`);
+        const note = file.expectedSelfHit
+          ? " — expected self-hit: this is the detector's own pattern table, not a finding"
+          : "";
+        lines.push(`- ${file.path} (${file.count}x)${note}`);
       }
-      if (pattern.files.length < pattern.totalOccurrences) {
-        lines.push(`- ... and more`);
+      if (pattern.filesTruncated) {
+        lines.push(`- ... and more files`);
       }
       lines.push("");
     }

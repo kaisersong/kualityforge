@@ -64,6 +64,19 @@ test("createKswarmHttpClient builds exact endpoint paths and preserves payload",
   assert.deepEqual(nodeResultCall.body.output, { summary: "done" });
 });
 
+test("createKswarmHttpClient sends the configured mutation token", async () => {
+  const { calls, fetchImpl } = createFetchRecorder(() => jsonResponse({ ok: true }));
+  const client = createKswarmHttpClient({
+    baseUrl: "http://127.0.0.1:4319",
+    fetch: fetchImpl,
+    mutationToken: "desktop-token"
+  });
+
+  await client.createScriptWorkflowProposal("proj-1", { workflowId: "wf" });
+
+  assert.equal(calls[0].headers["x-kswarm-mutation-token"], "desktop-token");
+});
+
 test("createKswarmHttpClient raises KswarmHttpError on non-2xx response", async () => {
   const { fetchImpl } = createFetchRecorder(() => jsonResponse({ error: "boom" }, { ok: false, status: 500 }));
   const client = createKswarmHttpClient({ baseUrl: "http://127.0.0.1:4319", fetch: fetchImpl });

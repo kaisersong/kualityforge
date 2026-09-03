@@ -4,25 +4,70 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { initializeArtifactRoot } from "../../../src/core/artifact-root.mjs";
 import { createKswarmRuntimePlan, createKswarmScriptPreview } from "../../../src/core/kswarm-workflow.mjs";
+import { decisionMarkdown, synthesizeReviewFindings, verificationMarkdown } from "../helpers/artifact-fixtures.mjs";
+import { applyDeterministicGitEnv, createChangesetProject } from "../helpers/git-env.mjs";
+
+await applyDeterministicGitEnv();
+
+const FINDING_TITLE =
+  "Potential issue identified during review requiring further investigation and resolution";
+
+const RAW_FINDING = {
+  id: "QF-001",
+  title: FINDING_TITLE,
+  description: "A concern was found that may impact code quality, security, or maintainability if not addressed appropriately in a timely manner",
+  suggestion: "Review the identified area and consider applying the recommended improvement to enhance overall code quality",
+  severity: "info"
+};
+const SYNTHESIZED_FINDINGS = synthesizeReviewFindings([
+  { runnerId: "codex:gpt-5", findings: [RAW_FINDING] },
+  { runnerId: "claude:sonnet", findings: [RAW_FINDING] }
+]);
 
 const cliPath = resolve("src/cli/index.mjs");
 
 test("kswarm-run --offline threads quorum policy and passes with advisory absent", async () => {
   const root = await mkdtemp(join(tmpdir(), "kualityforge-cli-quorum-"));
+  const projectRoot = await createChangesetProject();
   try {
     const artifactRoot = join(root, "artifacts");
     const reviewers = ["codex:gpt-5", "claude:sonnet", "gemini:pro"];
-    const { previewPath, planPath } = await writeRunFixtures(root, artifactRoot, reviewers);
+    const { previewPath, planPath, runtimePlan } = await writeRunFixtures(
+      root,
+      artifactRoot,
+      reviewers,
+      projectRoot
+    );
+    const seeded = await initializeArtifactRoot(artifactRoot, {
+      runId: runtimePlan.runId,
+      profile: runtimePlan.profile || "release",
+      context: {
+        projectRoot: runtimePlan.projectRoot,
+        docsRoots: runtimePlan.docsRoots || [],
+        qualityPrinciplesPath: runtimePlan.qualityPrinciplesPath,
+        changeGoal: runtimePlan.changeGoal,
+        generatedAt: runtimePlan.contextGeneratedAt,
+        ...(runtimePlan.changeset ? { changeset: runtimePlan.changeset } : {}),
+        enableStructureScan: true,
+        ...(runtimePlan.reviewType ? { reviewType: runtimePlan.reviewType } : {})
+      }
+    });
+    const contextManifestHash = seeded.manifest.context.contextManifest.sha256;
 
     const codexReview = join(root, "codex.md");
     const claudeReview = join(root, "claude.md");
     const decision = join(root, "decision.md");
     const verify = join(root, "verify.md");
-    await writeFile(codexReview, reviewMarkdown("codex:gpt-5"), "utf8");
-    await writeFile(claudeReview, reviewMarkdown("claude:sonnet"), "utf8");
-    await writeFile(decision, "# Decision\n\nApprove.\n", "utf8");
-    await writeFile(verify, "# Verify\n\nVerified.\n", "utf8");
+    await writeFile(codexReview, reviewMarkdown("codex:gpt-5", contextManifestHash), "utf8");
+    await writeFile(claudeReview, reviewMarkdown("claude:sonnet", contextManifestHash), "utf8");
+    await writeFile(
+      decision,
+      decisionMarkdown({ runId: "release-cli-quorum", findings: SYNTHESIZED_FINDINGS }),
+      "utf8"
+    );
+    await writeFile(verify, verificationMarkdown({ runnerId: "claude:verifier" }), "utf8");
 
     const result = spawnSync(
       process.execPath,
@@ -46,6 +91,8 @@ test("kswarm-run --offline threads quorum policy and passes with advisory absent
         `claude:sonnet=${claudeReview}`,
         "--decision",
         decision,
+        "--owner",
+        "kai",
         "--check",
         "npm test=passed",
         "--verify",
@@ -56,7 +103,7 @@ test("kswarm-run --offline threads quorum policy and passes with advisory absent
       { cwd: resolve("."), encoding: "utf8" }
     );
 
-    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
     const output = JSON.parse(result.stdout);
     assert.equal(output.status, "passed");
     assert.ok(
@@ -73,6 +120,7 @@ test("kswarm-run --offline threads quorum policy and passes with advisory absent
     assert.ok(gemini.absenceReason);
   } finally {
     await rm(root, { recursive: true, force: true });
+    await rm(projectRoot, { recursive: true, force: true });
   }
 });
 
@@ -109,7 +157,11 @@ test("kswarm-run exits non-zero on contradictory quorum policy", async () => {
     const reviewers = ["codex:gpt-5", "claude:sonnet"];
     const { previewPath, planPath } = await writeRunFixtures(root, artifactRoot, reviewers);
     const decision = join(root, "decision.md");
-    await writeFile(decision, "# Decision\n\nApprove.\n", "utf8");
+    await writeFile(
+      decision,
+      decisionMarkdown({ runId: "release-cli-quorum", findings: SYNTHESIZED_FINDINGS }),
+      "utf8"
+    );
 
     const result = spawnSync(
       process.execPath,
@@ -126,7 +178,9 @@ test("kswarm-run exits non-zero on contradictory quorum policy", async () => {
         "--quorum-min",
         "5",
         "--decision",
-        decision
+        decision,
+        "--owner",
+        "kai"
       ],
       { cwd: resolve("."), encoding: "utf8" }
     );
@@ -145,36 +199,40 @@ test("help text documents quorum usage and advisory limits", () => {
   assert.match(result.stdout, /cannot downgrade a runner already declared as --reviewer/);
 });
 
-async function writeRunFixtures(root, artifactRoot, reviewers) {
+async function writeRunFixtures(root, artifactRoot, reviewers, projectRoot = null) {
   const workflowOptions = {
     projectId: "proj-qf-cli-quorum",
     runId: "release-cli-quorum",
     artifactRoot,
+    ...(projectRoot ? { projectRoot } : {}),
     reviewers,
     createdAt: 1782000000000
   };
   const previewPath = join(root, "preview.json");
   const planPath = join(root, "runtime-plan.json");
+  const runtimePlan = createKswarmRuntimePlan(workflowOptions);
   await writeFile(previewPath, JSON.stringify(createKswarmScriptPreview(workflowOptions), null, 2), "utf8");
-  await writeFile(planPath, JSON.stringify(createKswarmRuntimePlan(workflowOptions), null, 2), "utf8");
-  return { previewPath, planPath };
+  await writeFile(planPath, JSON.stringify(runtimePlan, null, 2), "utf8");
+  return { previewPath, planPath, runtimePlan };
 }
 
-function reviewMarkdown(runnerId) {
+function reviewMarkdown(runnerId, contextManifestHash) {
   return `# Review
 
 \`\`\`kualityforge-review
 {
   "runnerId": "${runnerId}",
   "status": "completed",
+  "contextProvenance": {
+    "contextManifestHash": "${contextManifestHash}"
+  },
   "findings": [
     {
       "id": "QF-001",
-      "title": "Potential issue identified during review requiring further investigation and resolution",
+      "title": "${FINDING_TITLE}",
       "description": "A concern was found that may impact code quality, security, or maintainability if not addressed appropriately in a timely manner",
       "suggestion": "Review the identified area and consider applying the recommended improvement to enhance overall code quality",
-      "severity": "info",
-      "status": "risk_accepted"
+      "severity": "info"
     }
   ]
 }

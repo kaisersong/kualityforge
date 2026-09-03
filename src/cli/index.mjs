@@ -20,7 +20,7 @@ import {
   createOfflineKswarmClient,
   initializeArtifactRoot,
   loadPolicyFile,
-  loadManifestFromArtifactRoot,
+  loadGateInputFromArtifactRoot,
   createKswarmRuntimePlan,
   createKswarmScriptPreview,
   recordCheckResult,
@@ -32,6 +32,7 @@ import {
   runDeterministicEval,
   runReviewWorkflow,
   synthesizeArtifactRoot,
+  validateManifestShape,
   writeReportFromArtifactRoot,
   writeReviewFileToArtifactRoot
 } from "../index.mjs";
@@ -83,28 +84,28 @@ try {
     const checks = readOptions(args, "--check");
     const verify = requireOption(args, "--verify", "run");
     const verifierRunnerId = requireOption(args, "--verifier-runner-id", "run");
-    const verifyStatus = readOption(args, "--verify-status") || "verified";
+    const owner = requireOption(args, "--owner", "run");
     const policyPath = readOption(args, "--policy");
 
     if (reviews.length === 0) {
-      throw new Error("run requires at least one --review <path>");
+      throw new Error("run requires at least one --review <runnerId>=<path>");
     }
+    const reviewInputs = parseKeyValueOptions(reviews, "--review");
 
     await initializeArtifactRoot(artifactRoot, { runId, profile, context });
-    for (const review of reviews) {
-      await writeReviewFileToArtifactRoot(artifactRoot, review);
+    for (const [runnerId, review] of reviewInputs) {
+      await writeReviewFileToArtifactRoot(artifactRoot, review, { expectedRunnerId: runnerId });
     }
     await synthesizeArtifactRoot(artifactRoot);
-    await recordDecisionFile(artifactRoot, decision);
+    await recordDecisionFile(artifactRoot, decision, { owner });
     for (const check of checks) {
       const { name, status } = parseCheckOption(check);
       await recordCheckResult(artifactRoot, name, status);
     }
-    await recordVerificationFile(artifactRoot, verify, { runnerId: verifierRunnerId, status: verifyStatus });
+    await recordVerificationFile(artifactRoot, verify, { runnerId: verifierRunnerId });
 
-    const { manifest } = await loadManifestFromArtifactRoot(artifactRoot);
     const policy = policyPath ? await loadPolicyFile(policyPath) : undefined;
-    const gate = reduceQualityGate(manifest, policy);
+    const { gate } = await loadGateInputFromArtifactRoot(artifactRoot, policy);
     console.log(
       JSON.stringify(
         {
@@ -126,9 +127,11 @@ try {
     const runId = readOption(args, "--run-id");
     const profile = readOption(args, "--profile");
     const decisionPath = readOption(args, "--decision");
+    const decisionOwner = readOption(args, "--owner");
     const verifyPath = readOption(args, "--verify");
     const verifierRunnerId = readOption(args, "--verifier-runner-id");
     const policyPath = readOption(args, "--policy");
+    const qualityPrinciplesPath = readOption(args, "--quality-principles");
     const outDir = readOption(args, "--out") || readOption(args, "--report-out") || undefined;
     const hasReport = args.includes("--report");
     const html = args.includes("--html");
@@ -179,12 +182,14 @@ try {
         ...assignments.map((a) => `--agent ${a.agent}=${a.reviewPath}`),
         ...(reviewerArgs.length > 0 ? reviewerArgs.map((r) => `--reviewer ${r}`) : []),
         ...(decisionPath ? [`--decision ${decisionPath}`] : []),
+        ...(decisionOwner ? [`--owner ${decisionOwner}`] : []),
         ...(checkArgs.length > 0 ? checkArgs.map((c) => `--check ${c}`) : []),
         ...(verifyPath ? [`--verify ${verifyPath}`] : []),
         ...(verifierRunnerId ? [`--verifier-runner-id ${verifierRunnerId}`] : []),
         ...(hasReport ? ["--report"] : []),
         ...(html ? ["--html"] : []),
         ...(lang ? [`--lang ${lang}`] : []),
+        ...(qualityPrinciplesPath ? [`--quality-principles ${qualityPrinciplesPath}`] : []),
         ...(outDir ? [`--out ${outDir}`] : [])
       ].join(" \\\n  ");
 
@@ -221,6 +226,7 @@ try {
       profile,
       reviewers: allPathReviewers,
       decisionPath,
+      decisionOwner,
       checks,
       verifyPath,
       verifierRunnerId,
@@ -228,7 +234,8 @@ try {
       html,
       lang,
       outDir,
-      policyPath
+      policyPath,
+      qualityPrinciplesPath
     });
 
     console.log(
@@ -252,21 +259,45 @@ try {
     const artifactRoot = readOption(args, "--artifact-root");
     const policyPath = readOption(args, "--policy");
 
-    if (manifestPath && artifactRoot) {
-      throw new Error("gate accepts either --manifest or --artifact-root, not both");
+    // A manifest on its own is an unbacked claim: nothing ties it to the review,
+    // decision or verification artifacts it names. Answering "passed" for such a
+    // file is the forgery the gate exists to prevent.
+    if (manifestPath) {
+      throw new Error(
+        "gate requires --artifact-root <path>; use `validate --manifest <path>` to check manifest structure without evaluating the gate"
+      );
     }
 
-    if (!manifestPath && !artifactRoot) {
-      throw new Error("gate requires --manifest <path> or --artifact-root <path>");
+    if (!artifactRoot) {
+      throw new Error("gate requires --artifact-root <path>");
     }
 
-    const manifest = artifactRoot
-      ? (await loadManifestFromArtifactRoot(artifactRoot)).manifest
-      : JSON.parse(await readFile(manifestPath, "utf8"));
     const policy = policyPath ? await loadPolicyFile(policyPath) : undefined;
-    const result = reduceQualityGate(manifest, policy);
-    console.log(JSON.stringify(result, null, 2));
-    process.exit(result.exitCode);
+    const { gate } = await loadGateInputFromArtifactRoot(artifactRoot, policy);
+    console.log(JSON.stringify(gate, null, 2));
+    process.exit(gate.exitCode);
+  }
+
+  if (command === "validate") {
+    const manifestPath = requireOption(args, "--manifest", "validate");
+
+    if (readOption(args, "--policy")) {
+      throw new Error(
+        "validate does not accept --policy; policy only affects the gate verdict, which validate does not produce"
+      );
+    }
+
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+    const errors = validateManifestShape(manifest);
+    const warnings = [];
+    if (errors.length === 0 && reduceQualityGate(manifest).status !== "passed") {
+      warnings.push(
+        "manifest is structurally valid but would not pass as written; validate does not evaluate the quality gate, so run `gate --artifact-root <path>` for a release verdict"
+      );
+    }
+
+    console.log(JSON.stringify({ valid: errors.length === 0, errors, warnings }, null, 2));
+    process.exit(errors.length === 0 ? 0 : 1);
   }
 
   if (command === "kswarm-preview") {
@@ -349,9 +380,12 @@ try {
     const checks = readOptions(args, "--check").map(parseCheckOption);
     const verifyPath = readOption(args, "--verify");
     const verifierRunnerId = readOption(args, "--verifier-runner-id");
-    const verifyStatus = readOption(args, "--verify-status") || "verified";
+    const decisionOwner = readOption(args, "--owner");
     if (verifyPath && !verifierRunnerId) {
       throw new Error("kswarm-run requires --verifier-runner-id <id> when --verify is provided");
+    }
+    if (decisionPath && !decisionOwner) {
+      throw new Error("kswarm-run requires --owner <id> when --decision is provided");
     }
 
     let preview, runtimePlan;
@@ -429,13 +463,12 @@ try {
 
     const sharedProviders = {
       decisionProvider: decisionPath
-        ? async () => readFile(decisionPath, "utf8")
+        ? async () => ({ markdown: await readFile(decisionPath, "utf8"), owner: decisionOwner })
         : undefined,
       checkRunner: async () => checks,
       verifierRunner: verifyPath
         ? async () => ({
             runnerId: verifierRunnerId,
-            status: verifyStatus,
             markdown: await readFile(verifyPath, "utf8")
           })
         : undefined
@@ -450,7 +483,10 @@ try {
       })();
       const pollIntervalMs = Number(readOption(args, "--poll-interval-ms")) || undefined;
       const timeoutMs = Number(readOption(args, "--timeout-ms")) || undefined;
-      const kswarmClient = createKswarmHttpClient({ baseUrl: kswarmUrl });
+      const kswarmClient = createKswarmHttpClient({
+        baseUrl: kswarmUrl,
+        mutationToken: process.env.KSWARM_DESKTOP_MUTATION_TOKEN
+      });
       const result = await runKswarmBrokeredRuntimePlan({
         preview,
         runtimePlan,
@@ -550,7 +586,8 @@ try {
   if (command === "write-review") {
     const artifactRoot = requireOption(args, "--artifact-root", "write-review");
     const input = requireOption(args, "--input", "write-review");
-    const output = await writeReviewFileToArtifactRoot(artifactRoot, input);
+    const expectedRunnerId = requireOption(args, "--expected-runner-id", "write-review");
+    const output = await writeReviewFileToArtifactRoot(artifactRoot, input, { expectedRunnerId });
 
     console.log(
       JSON.stringify(
@@ -578,8 +615,9 @@ try {
   if (command === "decide") {
     const artifactRoot = requireOption(args, "--artifact-root", "decide");
     const input = requireOption(args, "--input", "decide");
-    const artifact = await recordDecisionFile(artifactRoot, input);
-    console.log(JSON.stringify({ status: "decision_recorded", artifact }, null, 2));
+    const owner = requireOption(args, "--owner", "decide");
+    const artifact = await recordDecisionFile(artifactRoot, input, { owner });
+    console.log(JSON.stringify({ status: "decision_recorded", artifact, owner }, null, 2));
     process.exit(0);
   }
 
@@ -595,9 +633,8 @@ try {
   if (command === "verify") {
     const artifactRoot = requireOption(args, "--artifact-root", "verify");
     const runnerId = requireOption(args, "--runner-id", "verify");
-    const status = requireOption(args, "--status", "verify");
     const input = requireOption(args, "--input", "verify");
-    const artifact = await recordVerificationFile(artifactRoot, input, { runnerId, status });
+    const artifact = await recordVerificationFile(artifactRoot, input, { runnerId });
     console.log(JSON.stringify({ status: "verification_recorded", artifact }, null, 2));
     process.exit(0);
   }
@@ -665,7 +702,10 @@ try {
     const kswarmUrl = readOption(args, "--kswarm-url") || process.env.KSWARM_URL || (() => {
       throw new Error("list-agents requires --kswarm-url <url> or KSWARM_URL env var");
     })();
-    const client = createKswarmHttpClient({ baseUrl: kswarmUrl });
+    const client = createKswarmHttpClient({
+      baseUrl: kswarmUrl,
+      mutationToken: process.env.KSWARM_DESKTOP_MUTATION_TOKEN
+    });
 
     const [agentsResult, livenessResult, participantsResult] = await Promise.allSettled([
       client.listAgents(),
@@ -734,7 +774,8 @@ try {
 
   throw new Error(`unknown command: ${command}`);
 } catch (error) {
-  console.error(error instanceof Error ? error.message : String(error));
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(error?.marker ? `${error.marker}: ${message}` : message);
   process.exit(64);
 }
 
@@ -757,7 +798,10 @@ function normalizeReviewerShortName(name) {
 }
 
 async function discoverOnlineReviewers(kswarmUrl) {
-  const client = createKswarmHttpClient({ baseUrl: kswarmUrl });
+  const client = createKswarmHttpClient({
+    baseUrl: kswarmUrl,
+    mutationToken: process.env.KSWARM_DESKTOP_MUTATION_TOKEN
+  });
   const [agentsResult, livenessResult] = await Promise.allSettled([
     client.listAgents(),
     client.listAgentsLiveness()

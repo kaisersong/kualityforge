@@ -5,6 +5,17 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createKswarmRuntimePlan, createKswarmScriptPreview } from "../../../src/core/kswarm-workflow.mjs";
 import { runKswarmBrokeredRuntimePlan } from "../../../src/core/kswarm-brokered-runtime.mjs";
+import { decisionMarkdown, verificationMarkdown } from "../helpers/artifact-fixtures.mjs";
+import { applyDeterministicGitEnv, createChangesetProject } from "../helpers/git-env.mjs";
+
+await applyDeterministicGitEnv();
+const FIXTURE_PROJECT_ROOT = await createChangesetProject();
+test.after(async () => {
+  await rm(FIXTURE_PROJECT_ROOT, { recursive: true, force: true });
+});
+
+const FINDING_TITLE =
+  "Potential issue identified during review requiring further investigation and resolution";
 
 const REVIEW = Object.freeze({
   mode: "quorum",
@@ -23,6 +34,7 @@ function workflowOptions(artifactRoot) {
     projectId: "proj-qf-quorum",
     runId: "release-quorum",
     artifactRoot,
+    projectRoot: FIXTURE_PROJECT_ROOT,
     reviewers: ["codex:gpt-5", "claude:sonnet", "gemini:pro"],
     createdAt: 1782000000000
   };
@@ -34,12 +46,17 @@ function runOptions(root, runtimePlan, client, overrides = {}) {
     runtimePlan,
     kswarmClient: client,
     policy: quorumPolicy(),
-    decisionProvider: async () => "# Decision\n\nNo findings to approve.\n",
+    decisionProvider: async () => {
+      const manifest = JSON.parse(await readFile(join(root, "manifest.json"), "utf8"));
+      return {
+        markdown: decisionMarkdown({ runId: "release-quorum", findings: manifest.findings }),
+        owner: "kai"
+      };
+    },
     checkRunner: async () => [{ name: "npm test", status: "passed" }],
     verifierRunner: async () => ({
       runnerId: "claude:verifier",
-      status: "verified",
-      markdown: "# Verify\n\nVerified.\n"
+      markdown: verificationMarkdown({ runnerId: "claude:verifier" })
     }),
     pollIntervalMs: 1,
     sleep: async () => {},
@@ -231,21 +248,23 @@ test("every expected reviewer has exactly one reviewOutcome", async () => {
   }
 });
 
-function reviewMarkdown(runnerId) {
+function reviewMarkdown(runnerId, contextManifestHash) {
   return `# Review
 
 \`\`\`kualityforge-review
 {
   "runnerId": "${runnerId}",
   "status": "completed",
+  "contextProvenance": {
+    "contextManifestHash": "${contextManifestHash}"
+  },
   "findings": [
     {
       "id": "QF-001",
-      "title": "Potential issue identified during review requiring further investigation and resolution",
+      "title": "${FINDING_TITLE}",
       "description": "A concern was found that may impact code quality, security, or maintainability if not addressed appropriately in a timely manner",
       "suggestion": "Review the identified area and consider applying the recommended improvement to enhance overall code quality",
-      "severity": "info",
-      "status": "risk_accepted"
+      "severity": "info"
     }
   ]
 }
@@ -285,7 +304,12 @@ function createFakeBrokeredClient(artifactRoot, runtimePlan, config = {}) {
       nodeCount += 1;
       const nodeId = `script-agent-${nodeCount}`;
       calls.push({ type: "dispatch_node", projectId, workflowRunId, input });
-      dispatched.push({ nodeId, outputArtifact: input.options.outputArtifact, runnerId: input.options.runnerId });
+      dispatched.push({
+        nodeId,
+        outputArtifact: input.options.outputArtifact,
+        runnerId: input.options.runnerId,
+        contextManifestHash: input.options.contextManifestHash
+      });
       return { ok: true, nodeId, dispatches: [{ attempt: 1, handoffId: `handoff-${nodeCount}` }] };
     },
     async getWorkflowRun(projectId, workflowRunId) {
@@ -299,7 +323,11 @@ function createFakeBrokeredClient(artifactRoot, runtimePlan, config = {}) {
             const runnerId = forgeRunnerIdFor[node.runnerId] || node.runnerId;
             const path = join(artifactRoot, node.outputArtifact);
             await mkdir(dirname(path), { recursive: true });
-            await writeFile(path, reviewMarkdown(runnerId), "utf8");
+            await writeFile(
+              path,
+              reviewMarkdown(runnerId, node.contextManifestHash),
+              "utf8"
+            );
           }
         }
       }

@@ -5,11 +5,41 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createKswarmRuntimePlan, createKswarmScriptPreview } from "../../../src/core/kswarm-workflow.mjs";
 import { runKswarmBrokeredRuntimePlan } from "../../../src/core/kswarm-brokered-runtime.mjs";
+import { decisionMarkdown, verificationMarkdown } from "../helpers/artifact-fixtures.mjs";
+import { applyDeterministicGitEnv, createChangesetProject } from "../helpers/git-env.mjs";
+
+await applyDeterministicGitEnv();
+
+const FIXTURE_PROJECT_ROOT = await createChangesetProject();
+test.after(async () => {
+  await rm(FIXTURE_PROJECT_ROOT, { recursive: true, force: true });
+});
+
+const FINDING_TITLE =
+  "Potential issue identified during review requiring further investigation and resolution";
+
+// Both reviewers report the same title, so synthesis merges them into one finding.
+const SYNTHESIZED_FINDINGS = [{
+  id: "QF-001",
+  severity: "info",
+  title: FINDING_TITLE,
+  type: "code",
+  priority: null,
+  principleId: null,
+  sourceRunnerId: "claude:sonnet",
+  sourceRunnerIds: ["claude:sonnet", "codex:gpt-5"]
+}];
+
+const decisionProvider = async () => ({
+  markdown: decisionMarkdown({ runId: "release-brokered", findings: SYNTHESIZED_FINDINGS }),
+  owner: "kai"
+});
 
 test("runKswarmBrokeredRuntimePlan dispatches reviewers, collects artifacts, and completes passed", async () => {
   const root = await mkdtemp(join(tmpdir(), "kualityforge-brokered-pass-"));
+  const projectRoot = await createChangesetProject();
   try {
-    const options = workflowOptions(root);
+    const options = workflowOptions(root, projectRoot);
     const runtimePlan = createKswarmRuntimePlan(options);
     const client = createFakeBrokeredClient(root, runtimePlan, { completeAfterPolls: 2 });
 
@@ -17,12 +47,11 @@ test("runKswarmBrokeredRuntimePlan dispatches reviewers, collects artifacts, and
       preview: createKswarmScriptPreview(options),
       runtimePlan,
       kswarmClient: client,
-      decisionProvider: async () => "# Decision\n\nNo findings to approve.\n",
+      decisionProvider,
       checkRunner: async () => [{ name: "npm test", status: "passed" }],
       verifierRunner: async () => ({
         runnerId: "claude:verifier",
-        status: "verified",
-        markdown: "# Verify\n\nVerified.\n"
+        markdown: verificationMarkdown({ runnerId: "claude:verifier" })
       }),
       pollIntervalMs: 1,
       sleep: async () => {}
@@ -31,6 +60,10 @@ test("runKswarmBrokeredRuntimePlan dispatches reviewers, collects artifacts, and
     assert.equal(result.gate.status, "passed");
     assert.equal(result.terminal.status, "passed");
     assert.equal(client.calls.filter((call) => call.type === "dispatch_node").length, 2);
+    assert.deepEqual(
+      client.calls.find((call) => call.type === "dispatch_node").input.options.contextRequired,
+      ["project_brief", "structure_scan"]
+    );
     assert.equal(client.calls.some((call) => call.type === "record_node_result"), false);
     assert.equal(client.calls.at(-1).type, "complete_run");
     assert.equal(client.calls.at(-1).input.terminal.status, "passed");
@@ -47,6 +80,30 @@ test("runKswarmBrokeredRuntimePlan dispatches reviewers, collects artifacts, and
       ["reviews/claude-sonnet.md", "reviews/codex-gpt-5.md"]
     );
     assert.equal(manifest.verification.runnerId, "claude:verifier");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+});
+
+test("runKswarmBrokeredRuntimePlan rejects an unusable changeset before reviewer dispatch", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kualityforge-brokered-no-freeze-"));
+  try {
+    const options = { ...workflowOptions(root, null), reviewType: "changeset" };
+    const runtimePlan = createKswarmRuntimePlan(options);
+    const client = createFakeBrokeredClient(root, runtimePlan);
+
+    await assert.rejects(
+      runKswarmBrokeredRuntimePlan({
+        preview: createKswarmScriptPreview(options),
+        runtimePlan,
+        kswarmClient: client
+      }),
+      /frozen changeset is required and is not usable/
+    );
+
+    assert.equal(client.calls.some((call) => call.type === "begin_group"), false);
+    assert.equal(client.calls.some((call) => call.type === "dispatch_node"), false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -83,7 +140,7 @@ test("runKswarmBrokeredRuntimePlan fails when a completed node has no review art
         preview: createKswarmScriptPreview(options),
         runtimePlan,
         kswarmClient: client,
-        decisionProvider: async () => "# Decision\n",
+        decisionProvider,
         pollIntervalMs: 1,
         sleep: async () => {}
       }),
@@ -110,11 +167,67 @@ test("runKswarmBrokeredRuntimePlan rejects reviewer runnerId mismatch", async ()
         preview: createKswarmScriptPreview(options),
         runtimePlan,
         kswarmClient: client,
-        decisionProvider: async () => "# Decision\n",
+        decisionProvider,
         pollIntervalMs: 1,
         sleep: async () => {}
       }),
       /review runnerId mismatch/
+    );
+    assert.equal(client.calls.some((call) => call.type === "complete_run"), false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+for (const nodeStatus of ["failed", "blocked"]) {
+  test(`required_all without reviewPolicy stops on a ${nodeStatus} reviewer`, async () => {
+    const root = await mkdtemp(join(tmpdir(), `kualityforge-brokered-${nodeStatus}-`));
+    try {
+      const options = workflowOptions(root);
+      const runtimePlan = createKswarmRuntimePlan(options);
+      const client = createFakeBrokeredClient(root, runtimePlan, {
+        completeAfterPolls: 1,
+        nodeStatuses: [nodeStatus, "completed"]
+      });
+
+      await assert.rejects(
+        runKswarmBrokeredRuntimePlan({
+          preview: createKswarmScriptPreview(options),
+          runtimePlan,
+          kswarmClient: client,
+          decisionProvider,
+          pollIntervalMs: 1,
+          sleep: async () => {}
+        }),
+        new RegExp(`required reviewer codex:gpt-5 node ${nodeStatus}`)
+      );
+      assert.equal(client.calls.some((call) => call.type === "complete_run"), false);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+}
+
+test("required_all without reviewPolicy stops on a vacuous brokered review", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kualityforge-brokered-vacuous-"));
+  try {
+    const options = workflowOptions(root);
+    const runtimePlan = createKswarmRuntimePlan(options);
+    const client = createFakeBrokeredClient(root, runtimePlan, {
+      completeAfterPolls: 1,
+      vacuousNodeIndexes: [0]
+    });
+
+    await assert.rejects(
+      runKswarmBrokeredRuntimePlan({
+        preview: createKswarmScriptPreview(options),
+        runtimePlan,
+        kswarmClient: client,
+        decisionProvider,
+        pollIntervalMs: 1,
+        sleep: async () => {}
+      }),
+      /required reviewer codex:gpt-5 produced vacuous output/
     );
     assert.equal(client.calls.some((call) => call.type === "complete_run"), false);
   } finally {
@@ -133,7 +246,7 @@ test("runKswarmBrokeredRuntimePlan completes blocked when gate is incomplete", a
       preview: createKswarmScriptPreview(options),
       runtimePlan,
       kswarmClient: client,
-      decisionProvider: async () => "# Decision\n",
+      decisionProvider,
       checkRunner: async () => [{ name: "npm test", status: "passed" }],
       pollIntervalMs: 1,
       sleep: async () => {}
@@ -161,7 +274,7 @@ test("runKswarmBrokeredRuntimePlan times out if reviewer nodes never complete", 
         preview: createKswarmScriptPreview(options),
         runtimePlan,
         kswarmClient: client,
-        decisionProvider: async () => "# Decision\n",
+        decisionProvider,
         pollIntervalMs: 10,
         timeoutMs: 30,
         now: () => clock,
@@ -177,34 +290,43 @@ test("runKswarmBrokeredRuntimePlan times out if reviewer nodes never complete", 
   }
 });
 
-function workflowOptions(artifactRoot) {
+function workflowOptions(artifactRoot, projectRoot = FIXTURE_PROJECT_ROOT) {
   return {
     projectId: "proj-qf-brokered",
     runId: "release-brokered",
     artifactRoot,
+    ...(projectRoot ? { projectRoot } : {}),
     reviewers: ["codex:gpt-5", "claude:sonnet"],
     createdAt: 1782000000000
   };
 }
 
-function reviewMarkdown(runnerId) {
+function reviewMarkdown(runnerId, contextManifestHash = null, findings = [
+  {
+    id: "QF-001",
+    title: FINDING_TITLE,
+    description:
+      "A concern was found that may impact code quality, security, or maintainability if not addressed appropriately in a timely manner",
+    suggestion:
+      "Review the identified area and consider applying the recommended improvement to enhance overall code quality",
+    severity: "info"
+  }
+]) {
   return `# Review
 
 \`\`\`kualityforge-review
-{
-  "runnerId": "${runnerId}",
-  "status": "completed",
-  "findings": [
-    {
-      "id": "QF-001",
-      "title": "Potential issue identified during review requiring further investigation and resolution",
-      "description": "A concern was found that may impact code quality, security, or maintainability if not addressed appropriately in a timely manner",
-      "suggestion": "Review the identified area and consider applying the recommended improvement to enhance overall code quality",
-      "severity": "info",
-      "status": "risk_accepted"
-    }
-  ]
-}
+${JSON.stringify(
+  {
+    runnerId,
+    status: "completed",
+    ...(contextManifestHash
+      ? { contextProvenance: { contextManifestHash } }
+      : {}),
+    findings
+  },
+  null,
+  2
+)}
 \`\`\`
 `;
 }
@@ -238,7 +360,12 @@ function createFakeBrokeredClient(artifactRoot, runtimePlan, config = {}) {
       nodeCount += 1;
       const nodeId = `script-agent-${nodeCount}`;
       calls.push({ type: "dispatch_node", projectId, workflowRunId, input });
-      dispatched.push({ nodeId, outputArtifact: input.options.outputArtifact, runnerId: input.options.runnerId });
+      dispatched.push({
+        nodeId,
+        outputArtifact: input.options.outputArtifact,
+        runnerId: input.options.runnerId,
+        contextManifestHash: input.options.contextManifestHash
+      });
       return { ok: true, nodeId, dispatches: [{ attempt: 1, handoffId: `handoff-${nodeCount}` }] };
     },
     async getWorkflowRun(projectId, workflowRunId) {
@@ -246,11 +373,21 @@ function createFakeBrokeredClient(artifactRoot, runtimePlan, config = {}) {
       calls.push({ type: "get_run", projectId, workflowRunId, poll: polls });
       const completed = polls >= completeAfterPolls;
       if (completed && !config.skipArtifacts) {
-        for (const node of dispatched) {
+        for (const [index, node] of dispatched.entries()) {
+          const terminalStatus = config.nodeStatuses?.[index] || "completed";
+          if (terminalStatus !== "completed") {
+            continue;
+          }
           const runnerId = config.forgeRunnerId || node.runnerId;
           const path = join(artifactRoot, node.outputArtifact);
           await mkdir(dirname(path), { recursive: true });
-          await writeFile(path, reviewMarkdown(runnerId), "utf8");
+          await writeFile(
+            path,
+            config.vacuousNodeIndexes?.includes(index)
+              ? reviewMarkdown(runnerId, node.contextManifestHash, [])
+              : reviewMarkdown(runnerId, node.contextManifestHash),
+            "utf8"
+          );
         }
       }
       return {
@@ -258,9 +395,9 @@ function createFakeBrokeredClient(artifactRoot, runtimePlan, config = {}) {
         workflowRun: {
           id: workflowRunId,
           projectId,
-          nodes: dispatched.map((node) => ({
+          nodes: dispatched.map((node, index) => ({
             id: node.nodeId,
-            status: completed ? "completed" : "running"
+            status: completed ? config.nodeStatuses?.[index] || "completed" : "running"
           }))
         }
       };

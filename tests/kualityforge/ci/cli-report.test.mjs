@@ -18,8 +18,30 @@ test("report command writes Markdown and HTML with scores and induced sections",
 
     const codexReview = await writeReview(root, "codex.md", "codex:gpt-5");
     const claudeReview = await writeReview(root, "claude.md", "claude:sonnet");
-    assert.equal(runCli(["write-review", "--artifact-root", root, "--input", codexReview]).status, 0);
-    assert.equal(runCli(["write-review", "--artifact-root", root, "--input", claudeReview]).status, 0);
+    assert.equal(
+      runCli([
+        "write-review",
+        "--artifact-root",
+        root,
+        "--input",
+        codexReview,
+        "--expected-runner-id",
+        "codex:gpt-5"
+      ]).status,
+      0
+    );
+    assert.equal(
+      runCli([
+        "write-review",
+        "--artifact-root",
+        root,
+        "--input",
+        claudeReview,
+        "--expected-runner-id",
+        "claude:sonnet"
+      ]).status,
+      0
+    );
 
     const synthesize = runCli(["synthesize", "--artifact-root", root]);
     assert.equal(synthesize.status, 0, synthesize.stderr);
@@ -54,8 +76,30 @@ test("report command honors KUALITYFORGE_REPORT_OUT_DIR when no flag is given", 
     );
     const codexReview = await writeReview(root, "codex.md", "codex:gpt-5");
     const claudeReview = await writeReview(root, "claude.md", "claude:sonnet");
-    assert.equal(runCli(["write-review", "--artifact-root", root, "--input", codexReview]).status, 0);
-    assert.equal(runCli(["write-review", "--artifact-root", root, "--input", claudeReview]).status, 0);
+    assert.equal(
+      runCli([
+        "write-review",
+        "--artifact-root",
+        root,
+        "--input",
+        codexReview,
+        "--expected-runner-id",
+        "codex:gpt-5"
+      ]).status,
+      0
+    );
+    assert.equal(
+      runCli([
+        "write-review",
+        "--artifact-root",
+        root,
+        "--input",
+        claudeReview,
+        "--expected-runner-id",
+        "claude:sonnet"
+      ]).status,
+      0
+    );
     assert.equal(runCli(["synthesize", "--artifact-root", root]).status, 0);
 
     const report = runCli(["report", "--artifact-root", root], {
@@ -90,7 +134,7 @@ async function writeReview(root, filename, runnerId) {
       "description": "The shared cache module does not implement proper synchronization which may lead to data corruption or inconsistent reads when accessed concurrently",
       "suggestion": "Add appropriate locking mechanisms such as mutexes or read-write locks around cache operations to ensure thread-safe access",
       "severity": "blocker",
-      "status": "risk_accepted",
+      "status": "open",
       "duplicateKey": "race-cache"
     }
   ]

@@ -8,6 +8,11 @@
     "schemaVersion": { "type": "string" },
     "runId": { "type": "string", "minLength": 1 },
     "createdAt": { "type": "string" },
+    "reviewType": {
+      "type": "string",
+      "enum": ["changeset", "full-project"],
+      "description": "Absent means changeset, the stricter of the two modes. The default is a gate criterion rather than a schema requirement, so an absent field stays schema-valid while the reducer still demands a usable frozen changeset."
+    },
     "status": {
       "type": "string",
       "enum": [
@@ -81,7 +86,10 @@
       "properties": {
         "artifact": { "type": "string" },
         "owner": { "type": "string" },
-        "status": { "type": "string" }
+        "status": { "type": "string", "enum": ["parsed", "unparsed"] },
+        "runId": { "type": "string" },
+        "findingSetDigest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "decidedAt": { "type": "string" }
       }
     },
     "fixer": {
@@ -102,7 +110,10 @@
       "type": "object",
       "properties": {
         "runnerId": { "type": "string" },
-        "status": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["verified", "partially_verified", "disputed", "unparsed"]
+        },
         "artifact": { "type": "string" },
         "verdicts": {
           "type": "array",
@@ -119,23 +130,44 @@
         "verdictCount": { "type": "integer", "minimum": 0 },
         "confirmedCount": { "type": "integer", "minimum": 0 },
         "dismissedCount": { "type": "integer", "minimum": 0 },
-        "cannotVerifyCount": { "type": "integer", "minimum": 0 }
+        "cannotVerifyCount": { "type": "integer", "minimum": 0 },
+        "coveredFindingIds": { "type": "array", "items": { "type": "string" } },
+        "uncoveredOpenFindingIds": { "type": "array", "items": { "type": "string" } },
+        "disputedFindings": { "type": "array", "items": { "type": "string" } }
       }
     },
     "findings": {
       "type": "array",
       "items": {
         "type": "object",
+        "description": "Schema validity is a shape lower bound, not a gate verdict: the reducer is the authority on whether a manifest passes. In particular sourceRunnerId and sourceRunnerIds are both optional here, while the reducer refuses a finding that names neither. A reducer stricter than this schema is the intended layering, not a bug to relax.",
         "required": ["id", "status"],
         "properties": {
           "id": { "type": "string" },
           "type": { "type": "string" },
           "principleId": { "type": ["string", "null"] },
-          "priority": { "type": ["string", "null"] },
+          "priority": {
+            "type": ["string", "null"],
+            "enum": ["must", "should", "prefer", null]
+          },
           "role": { "type": "string", "enum": ["required", "advisory"] },
           "title": { "type": "string" },
-          "status": { "type": "string" },
-          "severity": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "unchecked",
+              "approved_for_fix",
+              "deferred",
+              "wont_fix",
+              "risk_accepted",
+              "fixed",
+              "verification_failed",
+              "verified",
+              "dismissed"
+            ]
+          },
+          "severity": { "type": "string", "enum": ["blocker", "warning", "info"] },
           "duplicateKey": { "type": "string" },
           "sourceRunnerId": { "type": "string" },
           "sourceRunnerIds": {
@@ -143,8 +175,7 @@
             "items": { "type": "string" }
           },
           "reviewerCount": { "type": "integer", "minimum": 0 },
-          "dismissedBy": { "type": "string" },
-          "verificationNote": { "type": "string" }
+          "decisionReason": { "type": "string" }
         }
       }
     },

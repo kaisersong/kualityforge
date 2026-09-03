@@ -6,11 +6,11 @@
 
 ## 相关项目
 
-- `kualityforge` 关联项目都在 `/Users/song/projects/` 下：
-  - `kswarm`：负责 `kualityforge-flow` dynamic workflow 编排，包括 reviewer fan-out、task retry、resume、cancel、human decision gate、fix / verify 节点调度和 run state 持久化。
+- `kualityforge` 关联项目都在 `/Users/kai/projects/` 下：
+  - `kswarm`：负责 `script_generated` dynamic workflow 编排，包括 reviewer fan-out、task retry、resume、cancel、human decision gate、fix / verify 节点调度和 run state 持久化。
   - `intent-broker`：负责本地 agent / runner 注册、participant identity、任务投递、artifact completion event、decision / approval 事件和跨 agent 协作通信。
   - `xiaok-cli`：负责 desktop / CLI 入口、release / ship 集成、KualityForge run 状态展示和用户交互。
-  - `mydocs`：负责 `kualityforge` 文档、设计记录、质量记录和 eval 报告。`kualityforge/docs` 必须软链接到 `/Users/song/projects/mydocs/kualityforge`。
+  - `mydocs`：负责 `kualityforge` 文档、设计记录、质量记录和 eval 报告。`kualityforge/docs` 必须软链接到 `/Users/kai/projects/mydocs/kualityforge`。
 - 修改 KualityForge workflow、runner contract、artifact handoff、review/fix/verify 状态机时，优先检查 `kswarm` 是否也需要改。
 - 修改 agent 协作、runner dispatch、event correlation、participant identity、approval / decision 流程时，优先检查 `intent-broker` 是否也需要改。
 - 修改 xiaok desktop / CLI 入口、release gate、UI 展示、ship 集成时，优先检查 `xiaok-cli` 是否也需要改。
@@ -29,14 +29,16 @@
   - `kualityforge report --input <manifest.json> --html` 生成报告。xiaok 把评审结果序列化为 JSON manifest，调用 KualityForge CLI 输出 HTML，不需要引入 KualityForge 代码。
   - `kualityforge gate --artifact-root <path>` 判断 gate 结果。xiaok desktop 通过 CLI 获取 exit code 和 JSON 输出。
   - 修改 KualityForge CLI 接口（命令、flag、输出格式）时，优先检查 xiaok-cli 的调用方是否需要同步。
-- `kswarm` 通过 `kualityforge-flow` contract 集成：
+- `kswarm` 通过 `script_generated` workflow ingest 集成：
   - KualityForge 生成 `script_generated` workflow preview 和 runtime plan；KSwarm 消费这些结构执行编排。
-  - 修改 preview / runtime plan schema 时，优先检查 kswarm 的 `kualityforge-flow` template 是否需要同步。
+  - kswarm 侧**没有** `kualityforge-flow` 专属 template；走的是通用 script workflow 接口（`POST /projects/:id/workflows/:runId/script/nodes` → `hub.dispatchWorkflowScriptAgentNode`）。契约由 kswarm 的 `test/kualityforge-script-workflow-contract.test.js` 守卫。
+  - 修改 preview / runtime plan / reviewer node input 形状时，优先检查该测试是否需要同步。
+  - reviewer node 的 `permissions`（含 `deniedCommands`）会被 kswarm 透传并渲染进 runner prompt，但**只是 advisory**：runner 一律以 bypass 权限拉起，没有 shell 拦截层。因此 KualityForge 的 prompt 必须自带该约束，不能依赖消费侧强制执行。
   - `kswarm-run --offline` 使用 in-memory KSwarm client，只用于 contract smoke；live 集成在 kswarm 侧。
 - `intent-broker` 通过 runner identity 和 event 集成：
   - runner identity（`codex:gpt-5`、`claude:sonnet`、`xiaok`）同时是 KualityForge manifest 的 reviewer identity 和 intent-broker 的 participant identity。
   - 修改 runner identity 规则或 verifier independence 判断时，优先检查 intent-broker 的 participant contract。
-- 改 KualityForge 后，至少在 `/Users/song/projects/kualityforge` 跑与改动相关的测试：
+- 改 KualityForge 后，至少在 `/Users/kai/projects/kualityforge` 跑与改动相关的测试：
   ```bash
   npm test
   ```
@@ -44,8 +46,8 @@
   ```bash
   npm run test:kualityforge:unit
   ```
-  如果改了 KSwarm preview / runtime plan schema，到 `/Users/song/projects/kswarm` 检查 `kualityforge-flow` template 是否需要同步更新。
-- 只要 KualityForge CLI 接口改动会进入 xiaok desktop 的调用路径，回到 `/Users/song/projects/xiaok-cli` 后还要验证 xiaok 的 KualityForge 调用方不受影响。
+  如果改了 KSwarm preview / runtime plan / reviewer node input schema，到 `/Users/kai/projects/kswarm` 跑 `npm run test:workflow`（含 `test/kualityforge-script-workflow-contract.test.js`）确认契约未破。
+- 只要 KualityForge CLI 接口改动会进入 xiaok desktop 的调用路径，回到 `/Users/kai/projects/xiaok-cli` 后还要验证 xiaok 的 KualityForge 调用方不受影响。
 
 ## 当前重心
 
@@ -66,7 +68,7 @@
 
 ## 文档
 
-- 本项目的 `docs` 是软链接，指向 `/Users/song/projects/mydocs/kualityforge`。
+- 本项目的 `docs` 是软链接，指向 `/Users/kai/projects/mydocs/kualityforge`。
 - 设计文档、质量记录、eval 报告说明默认写到 `docs/**`，也就是实际写入 `mydocs/kualityforge/**`。
 - 不要把项目文档只写在 README 里；README 只放入口和运行说明。
 - 设计文档入口：
@@ -106,7 +108,7 @@
 
 ## 边界
 
-- `kswarm`：只放 `kualityforge-flow` workflow template、fan-out、retry、resume、cancel 等编排。
+- `kswarm`：只放 `script_generated` workflow 编排（node dispatch、fan-out、retry、resume、cancel）。
 - `intent-broker`：只放 runner dispatch、event correlation、participant identity 等协作协议。
 - `xiaok-cli`：只放入口、展示、ship/release 集成。
 - `kualityforge`：保持可被任意项目独立调用，不硬编码 xiaok-cli release 规则。
@@ -155,7 +157,7 @@
 ## Worktrees
 
 - 当前没有 active worktree。
-- 本地验证 `kualityforge` 命令必须使用主工作区 `/Users/song/projects/kualityforge`；不要 `npm link` feature worktree。
+- 本地验证 `kualityforge` 命令必须使用主工作区 `/Users/kai/projects/kualityforge`；不要 `npm link` feature worktree。
 - 如果后续确实需要 worktree，只为隔离实现创建，并在集成后移除。
 
 ## 测试与 Eval
@@ -179,6 +181,14 @@
 - 新增 reducer / parser / schema 行为必须先补 fixture 或 unit test。
 - 新增 report rendering 行为必须先补 report.test.mjs。
 - 修复 bug 优先补复现 fixture；不要只改 reducer 让当前 case 通过。
+- 不用自动化测试 pin prompt 措辞，但必须 pin prompt 渲染出的结构约束：
+  - 禁止：断言自然语言措辞（`/Do NOT run your own git diff/`）、语气、句式、标点。
+  - 必须：断言机器可检的不变量（`permissions.deniedCommands`、`options.contextRequired`、artifact 路径引用、fenced 块的 language tag 形状）。
+  - 判据：改写句子而语义不变时测试不能失败；删掉约束时测试必须失败。
+  - 因此安全约束要先表达成结构化字段，prompt 只是它的自然语言渲染；写不出结构化字段就说明约束放错了层次。
+- 会 spawn git 的测试必须隔离宿主 git 配置：用 `tests/kualityforge/helpers/git-env.mjs` 的 `applyDeterministicGitEnv()`。
+  - 只设 `GIT_CONFIG_NOSYSTEM` 不够，它不屏蔽用户的 global `~/.gitconfig`；污染确定性的正是 `diff.noprefix` / `diff.algorithm` / `core.autocrlf` / `core.quotePath`。
+  - 被测代码自己 spawn git 时，env 必须写进 `process.env`；只给 fixture setup 调用传 env 等于没隔离。
 
 ## 代码风格
 
@@ -191,7 +201,7 @@
 
 ## Docs Symlink Scope
 
-- `docs` 是软链接，指向 `/Users/song/projects/mydocs/kualityforge`。
+- `docs` 是软链接，指向 `/Users/kai/projects/mydocs/kualityforge`。
 - `docs/design/**`、`docs/quality/**`、`docs/evals/**` 都视为本 repo 工作范围内的项目文档。
-- 在 `/Users/song/projects/kualityforge` 下执行 `git status` 不会显示 `docs` 真实目标所属 repo 的全部上下文；文档改动实际属于 `mydocs` repo。
+- 在 `/Users/kai/projects/kualityforge` 下执行 `git status` 不会显示 `docs` 真实目标所属 repo 的全部上下文；文档改动实际属于 `mydocs` repo。
 - 任务需要时直接更新最小相关文档集；不要因为 design-doc edit 跨 symlink 就额外请求确认。

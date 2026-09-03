@@ -91,7 +91,7 @@ kualityforge init --artifact-root "docs/quality/${RUN_ID}" --run-id "${RUN_ID}" 
     {
       "id": "QF-001",
       "title": "<标题>",
-      "severity": "<blocker|high|warning|info>",
+      "severity": "<blocker|warning|info>",
       "status": "open",
       "duplicateKey": "<english-slug>"
     }
@@ -115,6 +115,6 @@ kualityforge report --artifact-root "docs/quality/${RUN_ID}" --html --lang zh &&
 
 ## 规则
 
-- severity 只有 4 级：blocker / high / warning / info
+- severity 只有 3 级：blocker / warning / info
 - id 和 duplicateKey 用英文 slug，title 和说明可用中文
 - 每条 finding 必须有代码位置和修复建议

@@ -259,6 +259,15 @@ export function evaluateReviewPolicy(manifest, policy) {
   return { blockers, warnings, succeededSet };
 }
 
+export function classifyReviewerExecution(runnerId, requiredSet = null, quorumSet = null) {
+  const role = requiredSet ? deriveRole(runnerId, requiredSet) : "required";
+  return {
+    role,
+    required: role === "required",
+    quorumMember: quorumSet ? quorumSet.has(runnerId) : true
+  };
+}
+
 export function deriveRole(runnerId, requiredSet) {
   return requiredSet.has(runnerId) ? "required" : "advisory";
 }

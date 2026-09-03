@@ -6,6 +6,9 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
 import { computeChangeset, renderChangesetMarkdown } from "../../../src/core/changeset.mjs";
+import { applyDeterministicGitEnv } from "../helpers/git-env.mjs";
+
+await applyDeterministicGitEnv();
 
 const execFileAsync = promisify(execFile);
 
@@ -86,6 +89,13 @@ test("computeChangeset requires a projectRoot", async () => {
   const changeset = await computeChangeset({});
   assert.equal(changeset.available, false);
   assert.match(changeset.reason, /projectRoot/);
+});
+
+test("computeChangeset preserves the caller-provided generation time", async () => {
+  const generatedAt = "2026-06-03T00:00:00.000Z";
+  const changeset = await computeChangeset({ generatedAt });
+
+  assert.equal(changeset.generatedAt, generatedAt);
 });
 
 test("renderChangesetMarkdown uses a fence that cannot be broken by backticks in the patch", () => {

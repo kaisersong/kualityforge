@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { instructionArtifactName } from "../../../src/core/context-pack.mjs";
 
 const cliPath = resolve("src/cli/index.mjs");
 
@@ -117,7 +118,10 @@ test("init can freeze project context and user quality principles", async () => 
     assert.equal(manifest.context.projectBrief.artifact, "context/project-brief.md");
     assert.match(await readFile(join(artifactRoot, "context", "project-brief.md"), "utf8"), /Review with frozen context/);
     assert.equal(
-      await readFile(join(artifactRoot, "context", "instructions", "AGENTS.md"), "utf8"),
+      await readFile(
+        join(artifactRoot, "context", "instructions", instructionArtifactName("AGENTS.md")),
+        "utf8"
+      ),
       "# Rules\n"
     );
   } finally {

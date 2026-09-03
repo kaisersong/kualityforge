@@ -13,6 +13,7 @@
       "type": "object",
       "properties": {
         "projectContextRequired": { "type": "boolean" },
+        "projectBriefRequired": { "type": "boolean" },
         "qualityPrinciplesRequired": { "type": "boolean" },
         "requiredReviewerContextAck": {
           "type": "array",

@@ -1,54 +1,95 @@
 import { renderScoresMarkdown } from "./reviewer-scoring.mjs";
-
-const SEVERITY_RANK = new Map([
-  ["blocker", 3],
-  ["warning", 2],
-  ["info", 1]
-]);
-
+import { normalizeFindingKey, severityRank } from "./finding-vocabulary.mjs";
 
 export function synthesizeFindings(findings) {
   const groups = new Map();
 
   for (const finding of findings) {
-    const key = finding.duplicateKey || finding.title || finding.id;
-    const existing = groups.get(key);
-    if (!existing) {
-      groups.set(key, {
-        ...finding,
-        reviewerCount: finding.sourceRunnerId ? 1 : 0,
-        sourceRunnerIds: finding.sourceRunnerId ? [finding.sourceRunnerId] : []
-      });
-      continue;
-    }
-
-    if (severityRank(finding.severity) > severityRank(existing.severity)) {
-      existing.severity = finding.severity;
-    }
-    if (finding.sourceRunnerId && !existing.sourceRunnerIds.includes(finding.sourceRunnerId)) {
-      existing.sourceRunnerIds.push(finding.sourceRunnerId);
-      existing.sourceRunnerIds.sort();
-      existing.reviewerCount = existing.sourceRunnerIds.length;
-    }
-    if (finding.description && finding.description !== existing.description) {
-      existing.description = [existing.description, finding.description]
-        .filter((d) => typeof d === "string" && d.length > 0)
-        .join("\n\n");
-    }
-    if (finding.suggestion && finding.suggestion !== existing.suggestion) {
-      existing.suggestion = [existing.suggestion, finding.suggestion]
-        .filter((s) => typeof s === "string" && s.length > 0)
-        .join("\n\n");
+    const key = mergeKey(finding);
+    const group = groups.get(key);
+    if (group) {
+      group.push(finding);
+    } else {
+      groups.set(key, [finding]);
     }
   }
 
-  return Array.from(groups.values()).sort((a, b) => {
-    const severityDelta = severityRank(b.severity) - severityRank(a.severity);
-    if (severityDelta !== 0) {
-      return severityDelta;
+  const merged = Array.from(groups.values())
+    .map(mergeGroup)
+    .sort((a, b) => {
+      const severityDelta = severityRank(b.severity) - severityRank(a.severity);
+      if (severityDelta !== 0) {
+        return severityDelta;
+      }
+      return a.id.localeCompare(b.id);
+    });
+
+  // Decisions and verdicts address findings by id. Two unmerged findings under one
+  // id would make that addressing ambiguous, so it fails at the write boundary
+  // rather than becoming a manifest the gate has to guess about.
+  const seenIds = new Set();
+  for (const finding of merged) {
+    if (seenIds.has(finding.id)) {
+      throw new Error(`duplicate finding id ${finding.id} across distinct findings`);
     }
-    return a.id.localeCompare(b.id);
-  });
+    seenIds.add(finding.id);
+  }
+
+  return merged;
+}
+
+// The key derives from the title rather than a reviewer-supplied duplicateKey,
+// which reviewers could otherwise use to swallow each other's findings. It also
+// carries every field the gate reads, so findings that disagree on
+// classification stay separate and a merge cannot destroy gate evidence.
+function mergeKey(finding) {
+  return JSON.stringify([
+    normalizeFindingKey(finding.title || finding.id),
+    finding.status ?? null,
+    finding.type ?? null,
+    finding.priority ?? null
+  ]);
+}
+
+function mergeGroup(members) {
+  const ordered = [...members].sort(
+    (a, b) =>
+      String(a.id ?? "").localeCompare(String(b.id ?? "")) ||
+      String(a.sourceRunnerId ?? "").localeCompare(String(b.sourceRunnerId ?? ""))
+  );
+
+  const sourceRunnerIds = [
+    ...new Set(ordered.map((item) => item.sourceRunnerId).filter(isNonEmptyString))
+  ].sort();
+
+  const merged = {
+    ...ordered[0],
+    severity: ordered.reduce(
+      (worst, item) => (severityRank(item.severity) > severityRank(worst) ? item.severity : worst),
+      ordered[0].severity
+    ),
+    reviewerCount: sourceRunnerIds.length,
+    sourceRunnerIds
+  };
+
+  const description = joinDistinct(ordered.map((item) => item.description));
+  if (description) {
+    merged.description = description;
+  }
+  const suggestion = joinDistinct(ordered.map((item) => item.suggestion));
+  if (suggestion) {
+    merged.suggestion = suggestion;
+  }
+
+  return merged;
+}
+
+function joinDistinct(values) {
+  return [...new Set(values.filter(isNonEmptyString))].join("\n\n");
+}
+
+function isNonEmptyString(value) {
+  return typeof value === "string" && value.length > 0;
 }
 
 export function renderSummaryMarkdown({ runId, findings, contextGaps = [], reviewPolicy = null, reviewOutcomes = [], reviewerScores = null, inducedPrinciples = null, reviewers = [] }) {
@@ -168,8 +209,4 @@ export function renderSummaryMarkdown({ runId, findings, contextGaps = [], revie
   }
 
   return `${lines.join("\n")}\n`;
-}
-
-function severityRank(severity) {
-  return SEVERITY_RANK.get(severity) || 0;
 }

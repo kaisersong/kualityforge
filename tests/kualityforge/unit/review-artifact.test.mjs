@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseReviewArtifact, safeArtifactName } from "../../../src/core/review-artifact.mjs";
+import {
+  mapReviewFindings,
+  parseReviewArtifact,
+  safeArtifactName
+} from "../../../src/core/review-artifact.mjs";
 
 test("parseReviewArtifact reads a structured review block", () => {
   const review = parseReviewArtifact(`# Review
@@ -197,4 +201,66 @@ test("parseReviewArtifact marks substantive findings as non-vacuous", () => {
 `);
 
   assert.equal(review.isVacuous, false);
+});
+
+function reviewMarkdown(body) {
+  return `# Review\n\n\`\`\`kualityforge-review\n${JSON.stringify(body, null, 2)}\n\`\`\`\n`;
+}
+
+test("a review that never claimed completion is not silently promoted to completed", () => {
+  assert.throws(
+    () => parseReviewArtifact(reviewMarkdown({ runnerId: "codex:gpt-5", findings: [] })),
+    /review status must be one of completed, failed/
+  );
+});
+
+test("a review status outside the closed vocabulary is rejected", () => {
+  assert.throws(
+    () =>
+      parseReviewArtifact(
+        reviewMarkdown({ runnerId: "codex:gpt-5", status: "probably_fine", findings: [] })
+      ),
+    /review status must be one of completed, failed; got: probably_fine/
+  );
+});
+
+test("a reviewer may honestly self-report a failed review", () => {
+  const review = parseReviewArtifact(
+    reviewMarkdown({ runnerId: "codex:gpt-5", status: "failed", findings: [] })
+  );
+  assert.equal(review.status, "failed");
+});
+
+test("mapReviewFindings is the mapping the parser applies, not a second copy of it", () => {
+  const findings = [
+    {
+      id: "QF-001",
+      title: "Missing input validation on API endpoint allows injection attacks",
+      description: "The /api/users endpoint does not validate the email parameter",
+      suggestion: "Add input validation using a schema library",
+      severity: "blocker",
+      status: "open"
+    },
+    { title: "Second issue worth reporting", severity: "info", status: "open" }
+  ];
+  const parsed = parseReviewArtifact(
+    reviewMarkdown({ runnerId: "codex:gpt-5", status: "completed", findings })
+  );
+  const mapped = mapReviewFindings("codex:gpt-5", findings);
+
+  assert.deepEqual(mapped.findings, parsed.findings);
+  // The one accumulator: if a second one existed it could drift from the value
+  // that actually decides isVacuous.
+  assert.equal(mapped.findingsTextLength < 200, parsed.isVacuous);
+});
+
+test("mapReviewFindings enforces the same finding vocabulary as the parser", () => {
+  assert.throws(
+    () => mapReviewFindings("codex:gpt-5", [{ title: "x", severity: "high", status: "open" }]),
+    /finding severity must be one of blocker, warning, info/
+  );
+  assert.throws(
+    () => mapReviewFindings("codex:gpt-5", [{ title: "x", severity: "info", status: "verified" }]),
+    /is not writable by a reviewer/
+  );
 });

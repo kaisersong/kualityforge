@@ -1,9 +1,19 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative } from "node:path";
 import { loadManifestFromArtifactRoot, saveManifestToArtifactRoot } from "./artifact-root.mjs";
+import { isSafeArtifactPath, normalizeArtifactKey, toProtocolPath } from "./artifact-path-format.mjs";
 import { parseReviewArtifact, safeArtifactName } from "./review-artifact.mjs";
 import { renderSummaryMarkdown, synthesizeFindings } from "./synthesis.mjs";
-import { parseVerificationArtifact } from "./verification-artifact.mjs";
+import {
+  deriveManifestVerification,
+  parseVerificationArtifact
+} from "./verification-artifact.mjs";
+import {
+  applyDecisionToFindings,
+  computeFindingSetDigest,
+  parseDecisionArtifact
+} from "./decision-artifact.mjs";
+import { GATE_MARKERS, protocolError } from "./gate-markers.mjs";
 import { scoreReviewers } from "./reviewer-scoring.mjs";
 import { inducePrinciples, renderInducedPrinciplesMarkdown } from "./principle-induction.mjs";
 import {
@@ -16,15 +26,47 @@ import {
 export async function writeReviewMarkdownToArtifactRoot(artifactRoot, markdown, options = {}) {
   const review = parseReviewArtifact(markdown);
   if (options.expectedRunnerId && review.runnerId !== options.expectedRunnerId) {
-    throw new Error(`review runnerId mismatch: expected ${options.expectedRunnerId}, got ${review.runnerId}`);
+    throw protocolError(
+      GATE_MARKERS.RUNNER_ID_MISMATCH,
+      `review runnerId mismatch: expected ${options.expectedRunnerId}, got ${review.runnerId}`
+    );
   }
 
-  const artifact = options.artifact || join("reviews", `${safeArtifactName(review.runnerId || options.sourceName || "review")}.md`);
-  assertSafeArtifactPath(artifact, "review artifact");
+  const artifactName = safeArtifactName(review.runnerId || options.sourceName || "review");
+  if (artifactName.length === 0) {
+    throw new Error(`runner id "${review.runnerId}" produces an empty artifact name`);
+  }
+
+  // The protocol form, not the string the caller passed: replay enumerates the
+  // reviews directory and compares plain strings, so "reviews\foo.md" reaching join()
+  // would create a file outside reviews/ that no enumeration can ever match.
+  const artifact = assertArtifactShape(
+    options.artifact || join("reviews", `${artifactName}.md`),
+    "reviews",
+    ".md"
+  );
+
+  const { manifest } = await loadManifestFromArtifactRoot(artifactRoot);
+
+  // Checked before the write, not after: once the file is overwritten the
+  // displaced reviewer's content is gone, and a later gate verdict cannot
+  // bring it back.
+  const artifactKey = normalizeArtifactKey(artifact);
+  const incumbent = manifest.reviewers.find(
+    (reviewer) =>
+      reviewer.runnerId !== review.runnerId &&
+      normalizeArtifactKey(reviewer.artifact) === artifactKey
+  );
+  if (incumbent) {
+    throw protocolError(
+      GATE_MARKERS.ARTIFACT_NAME_COLLISION,
+      `artifact name collision: runner "${incumbent.runnerId}" already owns "${incumbent.artifact}", refusing to overwrite for "${review.runnerId}"`
+    );
+  }
+
   await mkdir(join(artifactRoot, dirname(artifact)), { recursive: true });
   await writeFile(join(artifactRoot, artifact), markdown, "utf8");
 
-  const { manifest } = await loadManifestFromArtifactRoot(artifactRoot);
   const reviewers = manifest.reviewers.filter((item) => item.runnerId !== review.runnerId);
   reviewers.push({
     runnerId: review.runnerId,
@@ -209,16 +251,41 @@ async function readArtifactJson(path) {
 }
 
 export async function recordDecisionMarkdown(artifactRoot, markdown, options = {}) {
+  const owner = requireString(options.owner, "owner");
   const artifact = options.artifact || "decision.md";
   assertSafeArtifactPath(artifact, "decision artifact");
+  const { manifest } = await loadManifestFromArtifactRoot(artifactRoot);
+
+  const decision = parseDecisionArtifact(markdown, { findings: manifest.findings, owner });
+  if (decision) {
+    if (decision.runId !== manifest.runId) {
+      throw new Error(`decision runId ${decision.runId} does not match manifest runId ${manifest.runId}`);
+    }
+    if (decision.findingSetDigest !== computeFindingSetDigest(manifest.findings)) {
+      throw new Error("decision findingSetDigest does not match the current finding set");
+    }
+  }
+
   await mkdir(join(artifactRoot, dirname(artifact)), { recursive: true });
   await writeFile(join(artifactRoot, artifact), markdown, "utf8");
-  const { manifest } = await loadManifestFromArtifactRoot(artifactRoot);
+  if (!decision) {
+    await saveManifestToArtifactRoot(artifactRoot, {
+      ...manifest,
+      humanDecision: { artifact, owner, status: "unparsed" }
+    });
+    return artifact;
+  }
+
   await saveManifestToArtifactRoot(artifactRoot, {
     ...manifest,
+    findings: applyDecisionToFindings(manifest.findings, decision),
     humanDecision: {
       artifact,
-      status: "recorded"
+      owner,
+      status: "parsed",
+      runId: decision.runId,
+      findingSetDigest: decision.findingSetDigest,
+      decidedAt: decision.decidedAt
     }
   });
   return artifact;
@@ -246,55 +313,29 @@ export async function recordVerificationMarkdown(artifactRoot, markdown, options
   const runnerId = requireString(options.runnerId, "runnerId");
   const artifact = options.artifact || "verify.md";
   assertSafeArtifactPath(artifact, "verification artifact");
-  await mkdir(join(artifactRoot, dirname(artifact)), { recursive: true });
-  await writeFile(join(artifactRoot, artifact), markdown, "utf8");
-  const { manifest } = await loadManifestFromArtifactRoot(artifactRoot);
-
-  let verification;
-  let updatedFindings = manifest.findings;
-
+  let parsed;
   try {
-    const parsed = parseVerificationArtifact(markdown);
-    // backfill findings using duplicateKey or id matching
-    const verdictByKey = new Map();
-    for (const verdict of parsed.verdicts) {
-      verdictByKey.set(verdict.findingId, verdict);
-    }
-    updatedFindings = manifest.findings.map((finding) => {
-      const key = finding.duplicateKey || finding.id;
-      const verdict = verdictByKey.get(key) || verdictByKey.get(finding.id);
-      if (!verdict) return finding;
-      if (verdict.status === "dismissed") {
-        return { ...finding, status: "dismissed", dismissedBy: parsed.runnerId };
-      }
-      if (verdict.status === "cannot_verify") {
-        return { ...finding, verificationNote: "cannot_verify" };
-      }
-      return finding;
-    });
-    verification = {
-      runnerId: parsed.runnerId,
-      status: parsed.overallStatus,
-      artifact,
-      verdicts: parsed.verdicts,
-      verdictCount: parsed.verdictCount,
-      confirmedCount: parsed.confirmedCount,
-      dismissedCount: parsed.dismissedCount,
-      cannotVerifyCount: parsed.cannotVerifyCount
-    };
-  } catch {
-    // fallback: use caller-supplied status (backward compatible)
-    // do not default to "verified" on parse failure — fail closed
-    verification = {
-      runnerId,
-      status: options.status || "unparsed",
-      artifact
-    };
+    parsed = parseVerificationArtifact(markdown);
+  } catch (error) {
+    throw protocolError(
+      GATE_MARKERS.VERIFICATION_UNPARSED,
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+  if (parsed.runnerId !== runnerId) {
+    throw protocolError(
+      GATE_MARKERS.RUNNER_ID_MISMATCH,
+      `verification runnerId mismatch: expected ${runnerId}, got ${parsed.runnerId}`
+    );
   }
 
+  const { manifest } = await loadManifestFromArtifactRoot(artifactRoot);
+  const verification = deriveManifestVerification(parsed, manifest.findings, { artifact });
+
+  await mkdir(join(artifactRoot, dirname(artifact)), { recursive: true });
+  await writeFile(join(artifactRoot, artifact), markdown, "utf8");
   await saveManifestToArtifactRoot(artifactRoot, {
     ...manifest,
-    findings: updatedFindings,
     verification
   });
   return artifact;
@@ -304,20 +345,98 @@ export async function recordVerificationFile(artifactRoot, input, options = {}) 
   return recordVerificationMarkdown(artifactRoot, await readFile(input, "utf8"), options);
 }
 
-export function isSafeArtifactPath(value) {
-  if (typeof value !== "string" || value.length === 0) {
-    return false;
+export { isSafeArtifactPath, normalizeArtifactKey, toProtocolPath };
+
+// A reference that cannot be reached is a verdict about the run; a permission or IO
+// fault is a fault of the process running the gate and must not be reported as
+// "this artifact was tampered with".
+const REACHABILITY_ERRNOS = new Set(["ENOENT", "ENOTDIR", "ELOOP", "ENAMETOOLONG"]);
+
+// The lexical half of both shape exports. Sharing it is the point: a second copy is
+// how the write boundary and the replay side would come to disagree about which
+// paths are legal, and the write boundary would then produce artifacts its own gate
+// refuses.
+function artifactShapeReason(value, expectedRoot, expectedSuffix) {
+  if (!isSafeArtifactPath(value)) {
+    return "must stay within artifact root";
   }
-  if (value.startsWith("/") || value.startsWith("\\")) {
-    return false;
+  const segments = toProtocolPath(value).split("/");
+  // Case-sensitive on purpose: folding case here would admit "Reviews/x.md" at the
+  // write boundary while replay enumerates the literal "reviews" directory.
+  if (expectedRoot && segments[0] !== expectedRoot) {
+    return `must live under ${expectedRoot}/`;
   }
-  if (/^[a-zA-Z]:[\\/]/.test(value)) {
-    return false;
+  if (expectedSuffix && !segments[segments.length - 1].endsWith(expectedSuffix)) {
+    return `must end with ${expectedSuffix}`;
   }
-  if (value.split(/[\\/]+/).includes("..")) {
-    return false;
+  return null;
+}
+
+// Write boundary only. Returns the protocol form so the caller writes the string it
+// just validated rather than the one it was handed.
+export function assertArtifactShape(value, expectedRoot, expectedSuffix = null) {
+  const reason = artifactShapeReason(value, expectedRoot, expectedSuffix);
+  if (reason) {
+    throw new Error(`artifact "${value}" ${reason}`);
   }
-  return true;
+  return toProtocolPath(value);
+}
+
+// Gate and replay side. Protocol violations and unreachable references come back as
+// a reason; anything else is a process fault and keeps travelling, so callers must
+// not wrap this in try/catch.
+export async function checkArtifactShape({
+  value,
+  expectedRoot = null,
+  artifactRoot,
+  expectedSuffix = null
+}) {
+  const reason = artifactShapeReason(value, expectedRoot, expectedSuffix);
+  if (reason) {
+    return { ok: false, reason };
+  }
+  if (toProtocolPath(value) !== value) {
+    return { ok: false, reason: "is not a canonical artifact path" };
+  }
+
+  const target = join(artifactRoot, value);
+  let stats;
+  try {
+    stats = await stat(target);
+  } catch (error) {
+    if (REACHABILITY_ERRNOS.has(error.code)) {
+      return { ok: false, reason: "does not exist" };
+    }
+    throw error;
+  }
+
+  if (!stats.isFile()) {
+    return { ok: false, reason: "is not a file" };
+  }
+  if (stats.size === 0) {
+    return { ok: false, reason: "is empty" };
+  }
+
+  // A clean relative path can still be a symlink out of the root, which no amount of
+  // string inspection can see.
+  let targetRealpath;
+  let rootRealpath;
+  try {
+    rootRealpath = await realpath(artifactRoot);
+    targetRealpath = await realpath(target);
+  } catch (error) {
+    if (REACHABILITY_ERRNOS.has(error.code)) {
+      return { ok: false, reason: "does not exist" };
+    }
+    throw error;
+  }
+
+  const withinRoot = relative(rootRealpath, targetRealpath);
+  if (withinRoot === "" || withinRoot.startsWith("..") || isAbsolute(withinRoot)) {
+    return { ok: false, reason: "resolves outside the artifact root" };
+  }
+
+  return { ok: true };
 }
 
 function assertSafeArtifactPath(value, label) {

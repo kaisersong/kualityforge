@@ -1,10 +1,33 @@
 import { createHash } from "node:crypto";
+import {
+  CONTEXT_ACK_KEYS,
+  CONTEXT_FILES,
+  DEFAULT_CONTEXT_ACK_KEYS,
+  contextArtifactPath,
+  deriveContextAvailability
+} from "./context-vocabulary.mjs";
+import {
+  FINDING_PRIORITIES,
+  REVIEWER_WRITABLE_STATUSES,
+  REVIEW_ARTIFACT_STATUSES,
+  SEVERITY_LEVELS
+} from "./finding-vocabulary.mjs";
 import { safeArtifactName } from "./review-artifact.mjs";
 
 export const KSWARM_WORKFLOW_ID = "kualityforge_quality_gate";
 export const KSWARM_RUNTIME_PLAN_KIND = "kualityforge.kswarm-runtime-plan.v1";
 
-const DEFAULT_CONTEXT_REQUIRED = ["user_quality_principles", "project_brief"];
+// A denied command travels as an id, which a consumer can check against an allowlist,
+// and is shown to the reviewer through this table. The direction matters: a label is
+// never accepted from outside, and the prompt names the real command rather than the
+// id, because "do not run git-diff" points at nothing the reviewer could decline.
+export const REVIEWER_DENIED_COMMAND_LABELS = Object.freeze({
+  "git-diff": "git diff",
+  "git-stash": "git stash"
+});
+
+const REVIEWER_DENIED_COMMAND_IDS = Object.freeze(["git-diff"]);
+
 const DEFAULT_PHASES = [
   {
     id: "freeze-context",
@@ -36,7 +59,8 @@ const DEFAULT_PHASES = [
 export function createKswarmScriptPreview(options = {}) {
   const normalized = normalizeWorkflowOptions(options);
   const runtimePlan = createKswarmRuntimePlan(normalized);
-  const scriptHash = hashStable(runtimePlan);
+  const { contextGeneratedAt, ...hashableRuntimePlan } = runtimePlan;
+  const scriptHash = hashStable(hashableRuntimePlan);
 
   return {
     ok: true,
@@ -85,9 +109,9 @@ export function createKswarmRuntimePlan(options = {}) {
   });
 
   const baseContextArgs = createContextCliArgs(normalized);
-  const contextRequired = [...DEFAULT_CONTEXT_REQUIRED];
+  const contextRequired = [...DEFAULT_CONTEXT_ACK_KEYS];
   if (normalized.enableStructureScan || normalized.reviewType === "full-project") {
-    contextRequired.push("structure_scan");
+    contextRequired.push(CONTEXT_ACK_KEYS.structureScan);
   }
 
   const operations = [
@@ -177,6 +201,7 @@ export function createKswarmRuntimePlan(options = {}) {
     docsRoots: [...normalized.docsRoots],
     qualityPrinciplesPath: normalized.qualityPrinciplesPath,
     changeGoal: normalized.changeGoal,
+    contextGeneratedAt: new Date(normalized.createdAt).toISOString(),
     changeset: normalized.changeset,
     enableStructureScan: normalized.enableStructureScan,
     reviewType: normalized.reviewType,
@@ -191,6 +216,11 @@ export function createKswarmReviewerNodeInput(options = {}) {
   const reviewerRole = options.reviewerRole === "advisory" ? "advisory" : "required";
   const quorumMember = options.quorumMember === undefined ? true : Boolean(options.quorumMember);
   const required = options.required === undefined ? reviewerRole === "required" : Boolean(options.required);
+  const deniedCommandIds = [...REVIEWER_DENIED_COMMAND_IDS];
+  const deniedCommands = deniedCommandIds.map((id) => REVIEWER_DENIED_COMMAND_LABELS[id]);
+  const context = normalized.context;
+  const changesetOnly = normalized.reviewType !== "full-project";
+  const contextPath = (file) => `${normalized.artifactRoot}/${contextArtifactPath(file)}`;
   const promptLines = [
     "You are a KualityForge reviewer running inside a KSwarm dynamic workflow.",
     "",
@@ -198,23 +228,36 @@ export function createKswarmReviewerNodeInput(options = {}) {
     normalized.target,
     "",
     "Required context before judging the change:",
-    `- Read ${normalized.artifactRoot}/context/project-brief.md.`,
-    `- Evaluate ONLY the frozen changeset. Read ${normalized.artifactRoot}/context/changeset.md (human-readable) and ${normalized.artifactRoot}/context/changeset.json (machine-readable).`,
-    "- Do NOT run your own git diff or infer the changeset from the working tree; the changeset is frozen once so all reviewers judge the identical file set.",
-    "- If context/changeset.json reports patchTruncated:true, treat unlisted hunks as out of scope and record a contextGap.",
-    `- Read ${normalized.artifactRoot}/context/user-quality-principles.json when it exists.`,
-    "- Use project instructions and docs listed in the project brief as higher-priority context than generic assumptions.",
+    `- Read ${contextPath(CONTEXT_FILES.contextManifest)} and compute the SHA-256 digest of its exact bytes for contextProvenance.contextManifestHash.`,
+    `- Read ${contextPath(CONTEXT_FILES.projectBrief)}.`,
+    `- Review scope: ${changesetOnly ? "changeset-only" : "full-project"}`,
+    `- Do NOT run ${deniedCommands.join(", ")} or otherwise infer the changeset from the working tree; the changeset is frozen once so all reviewers judge the identical file set.`
   ];
-  if (normalized.hasStructureScan) {
+  if (context.hasChangeset) {
+    promptLines.push(
+      changesetOnly
+        ? `- Evaluate ONLY the frozen changeset. Read ${contextPath(CONTEXT_FILES.changesetMarkdown)} (human-readable) and ${contextPath(CONTEXT_FILES.changesetJson)} (machine-readable).`
+        : `- The whole project is in scope. Read ${contextPath(CONTEXT_FILES.changesetMarkdown)} (human-readable) and ${contextPath(CONTEXT_FILES.changesetJson)} (machine-readable) as recent-change context; findings may cover any file.`,
+      `- If ${contextArtifactPath(CONTEXT_FILES.changesetJson)} reports patchTruncated:true, treat unlisted hunks as out of scope and record a contextGap.`
+    );
+  }
+  if (context.hasQualityPrinciples) {
+    promptLines.push(`- Read ${contextPath(CONTEXT_FILES.qualityPrinciplesJson)}.`);
+  }
+  promptLines.push(
+    "- Use project instructions and docs listed in the project brief as higher-priority context than generic assumptions."
+  );
+  if (context.hasStructureScan) {
     promptLines.push("");
     promptLines.push("Repository structure:");
-    promptLines.push(`- Read ${normalized.artifactRoot}/context/structure-scan.md for the repository structure, suspicious patterns, and symbol map.`);
+    promptLines.push(`- Read ${contextPath(CONTEXT_FILES.structureScanMarkdown)} for the repository structure, suspicious patterns, and symbol map.`);
     promptLines.push("- Use the suspicious patterns list to identify files that need deep reading; do NOT read every file line-by-line.");
+    promptLines.push("- A pattern entry marked expectedSelfHit:true matched the scanner's own pattern table; it is not a project defect.");
     if (normalized.reviewType === "full-project") {
       promptLines.push("- For files flagged by the structure scan, read them individually to verify the finding.");
     }
   }
-  if (normalized.hasStructureScan && normalized.reviewType === "full-project" && Array.isArray(normalized.focusPatterns) && normalized.focusPatterns.length > 0) {
+  if (context.hasStructureScan && normalized.reviewType === "full-project" && Array.isArray(normalized.focusPatterns) && normalized.focusPatterns.length > 0) {
     promptLines.push("");
     promptLines.push("Your primary focus areas (from structure scan):");
     for (const pattern of normalized.focusPatterns) {
@@ -227,9 +270,22 @@ export function createKswarmReviewerNodeInput(options = {}) {
     "You have full access to the project source tree. Use your file-reading and search tools to:",
     "- Verify findings by reading the actual source files referenced in the changeset.",
     "- Navigate to related code using your grep/glob capabilities for context understanding.",
-    "- The frozen changeset defines your review SCOPE — your findings must ONLY cover changes in the changeset. You may explore other files for context, but do not report findings about code outside the changeset."
+    changesetOnly
+      ? "- The frozen changeset defines your review SCOPE — your findings must ONLY cover changes in the changeset. You may explore other files for context, but do not report findings about code outside the changeset."
+      : "- The whole project defines your review SCOPE — report findings anywhere in the source tree. The frozen changeset is recent-change context, not a scope limit."
   );
   promptLines.push(
+    "",
+    "Finding vocabulary — the artifact parser rejects any other value:",
+    `- review status: ${REVIEW_ARTIFACT_STATUSES.join(" | ")}`,
+    `- finding severity: ${SEVERITY_LEVELS.join(" | ")}`,
+    `- finding priority: ${FINDING_PRIORITIES.join(" | ")} (omit the field when unsure)`,
+    `- finding status: ${REVIEWER_WRITABLE_STATUSES.join(" | ")} — a reviewer may not resolve a finding, only report it`,
+    "- Do not report a duplicate key; the synthesizer derives one from the title, and a reviewer-chosen key would let one reviewer address another reviewer's finding.",
+    "- A review whose findings carry no real prose counts as vacuous and does not satisfy the gate."
+  );
+  promptLines.push(
+    "",
     "Your entire final message MUST BE the review, written as Markdown. Do not summarize or describe it; emit the Markdown itself.",
     "The Markdown MUST contain exactly one fenced JSON block, written verbatim with this fence and shape (fill in real findings):",
     "",
@@ -237,15 +293,30 @@ export function createKswarmReviewerNodeInput(options = {}) {
     JSON.stringify(
       {
         runnerId: normalized.runnerId,
-        status: "completed",
+        status: REVIEW_ARTIFACT_STATUSES[0],
         contextRead: {
           projectBrief: true,
           userQualityPrinciples: true
         },
         contextConfidence: "high",
         contextGaps: [],
+        contextProvenance: {
+          contextManifestHash: normalized.contextManifestHash
+        },
         principleAlignment: {},
-        findings: []
+        findings: [
+          {
+            id: "QF-001",
+            type: "code",
+            title: "One imperative sentence naming the defect",
+            severity: SEVERITY_LEVELS[0],
+            priority: FINDING_PRIORITIES[0],
+            status: REVIEWER_WRITABLE_STATUSES[0],
+            principleId: null,
+            description: "What is wrong, in which file, and the evidence you read.",
+            suggestion: "The concrete change that would fix it."
+          }
+        ]
       },
       null,
       2
@@ -256,7 +327,7 @@ export function createKswarmReviewerNodeInput(options = {}) {
   );
   if (normalized.lang === "zh") {
     promptLines.push("");
-    promptLines.push("语言要求：所有 finding 的 title、description、suggestion 字段必须使用中文撰写。duplicateKey 和 id 保持英文 slug。");
+    promptLines.push("语言要求：所有 finding 的 title、description、suggestion 字段必须使用中文撰写。id 保持英文 slug。");
   }
   const prompt = promptLines.join("\n");
 
@@ -270,7 +341,15 @@ export function createKswarmReviewerNodeInput(options = {}) {
     fanoutItemLabel: normalized.runnerId,
     required,
     evidenceRequired: true,
-    permissions: { allowShell: true, allowWrite: false, allowNetwork: false, allowExternalAction: false },
+    permissions: {
+      // Only the two fields a consumer can act on. The four allow* booleans were
+      // dropped: nothing on the script_generated path read them, and allowWrite:false
+      // contradicted this same prompt's instruction to write the review artifact.
+      // deniedCommands stays advisory — KSwarm renders it into the runner prompt but
+      // has no shell interceptor — which is why the constraint is also stated above.
+      deniedCommandIds,
+      deniedCommands
+    },
     prompt,
     options: {
       role: "reviewer",
@@ -279,9 +358,8 @@ export function createKswarmReviewerNodeInput(options = {}) {
       runnerId: normalized.runnerId,
       artifactRoot: normalized.artifactRoot,
       outputArtifact: normalized.outputArtifact,
-      contextRequired: normalized.hasStructureScan
-        ? [...DEFAULT_CONTEXT_REQUIRED, "structure_scan"]
-        : [...DEFAULT_CONTEXT_REQUIRED]
+      contextManifestHash: normalized.contextManifestHash,
+      contextRequired: [...context.ackKeys]
     }
   };
 }
@@ -350,6 +428,11 @@ function normalizeWorkflowOptions(options) {
 
 function normalizeReviewerNodeOptions(options) {
   const runnerId = requireString(options.runnerId, "runnerId");
+  const context = resolveContextAvailability(options);
+  const contextManifestHash = options.contextFiles[CONTEXT_FILES.contextManifest]?.sha256;
+  if (typeof contextManifestHash !== "string" || !/^[a-f0-9]{64}$/i.test(contextManifestHash)) {
+    throw new Error("contextFiles must include a sha256 context manifest descriptor");
+  }
   return {
     runId: requireString(options.runId, "runId"),
     artifactRoot: requireString(options.artifactRoot, "artifactRoot"),
@@ -359,9 +442,21 @@ function normalizeReviewerNodeOptions(options) {
     parallelGroupId: requireString(options.parallelGroupId, "parallelGroupId"),
     lang: options.lang || null,
     reviewType: options.reviewType || null,
-    hasStructureScan: options.hasStructureScan || false,
+    context,
+    contextManifestHash,
     focusPatterns: options.focusPatterns || null
   };
+}
+
+function resolveContextAvailability(options) {
+  if (
+    !options.contextFiles ||
+    typeof options.contextFiles !== "object" ||
+    Array.isArray(options.contextFiles)
+  ) {
+    throw new Error("contextFiles is required");
+  }
+  return deriveContextAvailability(options.contextFiles);
 }
 
 function normalizeChangesetOptions(changeset) {

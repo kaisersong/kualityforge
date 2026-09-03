@@ -6,7 +6,11 @@ export function createKswarmHttpClient(options = {}) {
   if (typeof fetchImpl !== "function") {
     throw new Error("createKswarmHttpClient requires a fetch implementation");
   }
-  const headers = { ...DEFAULT_HEADERS, ...(options.headers || {}) };
+  const headers = {
+    ...DEFAULT_HEADERS,
+    ...(options.mutationToken ? { "x-kswarm-mutation-token": options.mutationToken } : {}),
+    ...(options.headers || {})
+  };
 
   async function send(action, method, path, body) {
     let response;

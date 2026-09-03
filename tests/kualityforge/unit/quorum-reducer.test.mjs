@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { reduceQualityGate } from "../../../src/core/gate-reducer.mjs";
 import { normalizePolicy } from "../../../src/core/policy.mjs";
+import { asFullProject, bindDecision } from "../helpers/artifact-fixtures.mjs";
 
 const REVIEW = Object.freeze({
   mode: "quorum",
@@ -11,27 +12,30 @@ const REVIEW = Object.freeze({
   quorumMin: 2
 });
 
+// Declared full-project once for the whole file: quorum arithmetic is orthogonal to the
+// frozen changeset, and this mode's own context requirements are declared below.
 function baseManifest(overrides = {}) {
-  return {
-    runId: "qf-quorum",
-    status: "verified",
-    reviewPolicy: { ...REVIEW },
-    reviewers: [
-      { runnerId: "req:1", status: "completed", artifact: "reviews/req1.md" },
-      { runnerId: "adv:2", status: "completed", artifact: "reviews/adv2.md" }
-    ],
-    reviewOutcomes: [
-      { runnerId: "req:1", status: "succeeded" },
-      { runnerId: "adv:2", status: "succeeded" },
-      { runnerId: "adv:3", status: "skipped", absenceReason: "dispatch declined" }
-    ],
-    humanDecision: { artifact: "decision.md" },
-    fixer: { runnerId: "codex:fixer" },
-    verification: { runnerId: "claude:verifier", status: "verified", artifact: "verify.md" },
-    findings: [],
-    requiredChecks: [{ name: "npm test", status: "passed" }],
-    ...overrides
-  };
+  return asFullProject(
+    bindDecision({
+      runId: "qf-quorum",
+      status: "verified",
+      reviewPolicy: { ...REVIEW },
+      reviewers: [
+        { runnerId: "req:1", status: "completed", artifact: "reviews/req1.md" },
+        { runnerId: "adv:2", status: "completed", artifact: "reviews/adv2.md" }
+      ],
+      reviewOutcomes: [
+        { runnerId: "req:1", status: "succeeded" },
+        { runnerId: "adv:2", status: "succeeded" },
+        { runnerId: "adv:3", status: "skipped", absenceReason: "dispatch declined" }
+      ],
+      fixer: { runnerId: "codex:fixer", artifact: "fix-plan.md" },
+      verification: { runnerId: "claude:verifier", status: "verified", artifact: "verify.md" },
+      findings: [],
+      requiredChecks: [{ name: "npm test", status: "passed" }],
+      ...overrides
+    })
+  );
 }
 
 function reduce(manifest, reviewOverride) {
@@ -68,19 +72,18 @@ test("quorum over-satisfied passes (item 2)", () => {
 
 test("required_all unchanged when review policy absent (item 3)", () => {
   const result = reduceQualityGate(
-    {
+    asFullProject(bindDecision({
       runId: "legacy",
       status: "verified",
       reviewers: [
-        { runnerId: "a", artifact: "a.md" },
-        { runnerId: "b", artifact: "b.md" }
+        { runnerId: "a", status: "completed", artifact: "a.md" },
+        { runnerId: "b", status: "completed", artifact: "b.md" }
       ],
-      humanDecision: { artifact: "d.md" },
-      fixer: { runnerId: "f" },
+      fixer: { runnerId: "f", artifact: "fix-plan.md" },
       verification: { runnerId: "v", status: "verified", artifact: "v.md" },
       findings: [],
       requiredChecks: [{ name: "t", status: "passed" }]
-    },
+    })),
     normalizePolicy({})
   );
   assert.equal(result.status, "passed");

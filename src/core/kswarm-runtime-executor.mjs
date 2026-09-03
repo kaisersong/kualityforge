@@ -10,8 +10,13 @@ import {
   synthesizeArtifactRoot,
   writeReviewMarkdownToArtifactRoot
 } from "./artifact-operations.mjs";
-import { reduceQualityGate } from "./gate-reducer.mjs";
-import { deriveRole, isReviewPolicyEnabled, validateReviewPolicyShape } from "./review-policy.mjs";
+import { loadGateInputFromArtifactRoot } from "./gate-input.mjs";
+import { changesetRequired, changesetUsable } from "./changeset-usability.mjs";
+import {
+  classifyReviewerExecution,
+  isReviewPolicyEnabled,
+  validateReviewPolicyShape
+} from "./review-policy.mjs";
 import {
   KSWARM_RUNTIME_PLAN_KIND,
   createKswarmReviewerNodeInput,
@@ -81,11 +86,15 @@ export async function runKswarmRuntimePlan(options = {}) {
     throw new Error("startScriptWorkflowRunFromProposal failed: workflowRun.id is required");
   }
 
-  await initializeArtifactRoot(runtimePlan.artifactRoot, {
-    runId: runtimePlan.runId,
-    profile: runtimePlan.profile || "release",
-    context: createContextOptions(runtimePlan)
-  });
+  const { manifest: initialManifest, contextFiles, changeset } = await initializeArtifactRoot(
+    runtimePlan.artifactRoot,
+    {
+      runId: runtimePlan.runId,
+      profile: runtimePlan.profile || "release",
+      context: createContextOptions(runtimePlan)
+    }
+  );
+  assertDispatchContext(runtimePlan.reviewType, initialManifest.context, changeset);
 
   const parallelOperation = runtimePlan.operations.find((operation) => operation.type === "begin_parallel_group");
   const parallelGroupResult = await expectOk(
@@ -107,9 +116,11 @@ export async function runKswarmRuntimePlan(options = {}) {
   const reviewerResults = [];
   const reviewOutcomes = reviewPolicy ? [] : null;
   for (const reviewer of runtimePlan.reviewers) {
-    const role = requiredSet ? deriveRole(reviewer.runnerId, requiredSet) : "required";
-    const quorumMember = quorumSet ? quorumSet.has(reviewer.runnerId) : true;
-    const isRequired = role === "required";
+    const {
+      role,
+      required: isRequired,
+      quorumMember
+    } = classifyReviewerExecution(reviewer.runnerId, requiredSet, quorumSet);
     const nodeInput = createKswarmReviewerNodeInput({
       runId: runtimePlan.runId,
       artifactRoot: runtimePlan.artifactRoot,
@@ -122,7 +133,7 @@ export async function runKswarmRuntimePlan(options = {}) {
       required: isRequired,
       lang: options.lang,
       reviewType: runtimePlan.reviewType || null,
-      hasStructureScan: Boolean(runtimePlan.enableStructureScan)
+      contextFiles
     });
     const dispatched = await expectOk(
       "dispatchWorkflowScriptAgentNode",
@@ -141,7 +152,7 @@ export async function runKswarmRuntimePlan(options = {}) {
         quorumMember
       });
     } catch (error) {
-      if (!reviewPolicy || isRequired) {
+      if (isRequired) {
         throw error;
       }
       reviewOutcomes.push({
@@ -155,7 +166,7 @@ export async function runKswarmRuntimePlan(options = {}) {
       continue;
     }
 
-    if (reviewPolicy && (reviewerOutput === null || reviewerOutput === undefined)) {
+    if (reviewerOutput === null || reviewerOutput === undefined) {
       if (isRequired) {
         throw new Error(`required reviewer ${reviewer.runnerId} produced no review artifact`);
       }
@@ -176,7 +187,7 @@ export async function runKswarmRuntimePlan(options = {}) {
       artifact: reviewer.outputArtifact
     });
     if (artifact.isVacuous) {
-      if (!reviewPolicy || isRequired) {
+      if (isRequired) {
         throw new Error(`required reviewer ${reviewer.runnerId} produced vacuous output (no substantive findings)`);
       }
       reviewOutcomes.push({
@@ -229,11 +240,15 @@ export async function runKswarmRuntimePlan(options = {}) {
   }
   let decision = null;
   if (typeof decisionProvider === "function") {
-    const markdown = normalizeMarkdownResult(
-      await decisionProvider({ artifactRoot: runtimePlan.artifactRoot, summaryArtifact: synthesis.artifact, runtimePlan }),
-      "decisionProvider"
-    );
-    decision = await recordDecisionMarkdown(runtimePlan.artifactRoot, markdown);
+    const decisionOutput = await decisionProvider({
+      artifactRoot: runtimePlan.artifactRoot,
+      summaryArtifact: synthesis.artifact,
+      runtimePlan
+    });
+    const markdown = normalizeMarkdownResult(decisionOutput, "decisionProvider");
+    decision = await recordDecisionMarkdown(runtimePlan.artifactRoot, markdown, {
+      owner: decisionOutput?.owner || preview.requestedBy || "human"
+    });
   }
 
   const checkOperation = runtimePlan.operations.find((operation) => operation.type === "run_required_checks");
@@ -252,13 +267,11 @@ export async function runKswarmRuntimePlan(options = {}) {
     const verifierOutput = await verifierRunner({ artifactRoot: runtimePlan.artifactRoot, runtimePlan });
     const markdown = normalizeMarkdownResult(verifierOutput, "verifierRunner");
     verification = await recordVerificationMarkdown(runtimePlan.artifactRoot, markdown, {
-      runnerId: verifierOutput.runnerId,
-      status: verifierOutput.status || "verified"
+      runnerId: verifierOutput.runnerId
     });
   }
 
-  const { manifest } = await loadManifestFromArtifactRoot(runtimePlan.artifactRoot);
-  const gate = reduceQualityGate(manifest, options.policy);
+  const { gate } = await loadGateInputFromArtifactRoot(runtimePlan.artifactRoot, options.policy);
   const terminal = mapGateResultToKswarmTerminal(gate, { artifactRoot: runtimePlan.artifactRoot });
   const completionResult = {
     status: gate.status,
@@ -355,6 +368,21 @@ async function persistReviewMetadata(artifactRoot, reviewPolicy, reviewOutcomes)
   });
 }
 
+function assertDispatchContext(reviewType, context, changeset) {
+  if (changesetRequired(reviewType)) {
+    if (!changesetUsable(changeset).usable) {
+      throw new Error("frozen changeset is required and is not usable");
+    }
+    return;
+  }
+  if (!context?.projectContext?.artifact) {
+    throw new Error("full-project review requires a projectContext artifact");
+  }
+  if (!context?.projectBrief?.artifact) {
+    throw new Error("full-project review requires a projectBrief artifact");
+  }
+}
+
 function createContextOptions(runtimePlan) {
   if (
     !runtimePlan.projectRoot &&
@@ -371,6 +399,7 @@ function createContextOptions(runtimePlan) {
     docsRoots: runtimePlan.docsRoots || [],
     qualityPrinciplesPath: runtimePlan.qualityPrinciplesPath,
     changeGoal: runtimePlan.changeGoal,
+    generatedAt: runtimePlan.contextGeneratedAt,
     ...(runtimePlan.changeset ? { changeset: runtimePlan.changeset } : {}),
     enableStructureScan: true,
     ...(runtimePlan.reviewType ? { reviewType: runtimePlan.reviewType } : {})

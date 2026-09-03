@@ -4,18 +4,48 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { decisionMarkdown, synthesizeReviewFindings, verificationMarkdown } from "../helpers/artifact-fixtures.mjs";
+import { applyDeterministicGitEnv, createChangesetProject } from "../helpers/git-env.mjs";
+
+await applyDeterministicGitEnv();
+
+const FINDING_TITLE =
+  "Potential issue identified during review requiring further investigation and resolution";
+
+const RAW_FINDING = {
+  id: "QF-001",
+  title: FINDING_TITLE,
+  description: "A concern was found that may impact code quality, security, or maintainability if not addressed appropriately in a timely manner",
+  suggestion: "Review the identified area and consider applying the recommended improvement to enhance overall code quality",
+  severity: "info"
+};
+const SYNTHESIZED_FINDINGS = synthesizeReviewFindings([
+  { runnerId: "codex:gpt-5", findings: [RAW_FINDING] },
+  { runnerId: "claude:sonnet", findings: [RAW_FINDING] }
+]);
 
 const cliPath = resolve("src/cli/index.mjs");
 
 test("run executes a complete local artifact workflow", async () => {
   const root = await mkdtemp(join(tmpdir(), "kualityforge-run-local-"));
+  const projectRoot = await createChangesetProject();
   try {
     const codexReview = await writeReview(root, "codex-input.md", "codex:gpt-5");
     const claudeReview = await writeReview(root, "claude-input.md", "claude:sonnet");
     const decision = join(root, "decision-input.md");
     const verify = join(root, "verify-input.md");
-    await writeFile(decision, "# Decision\n\nNo findings to approve.\n", "utf8");
-    await writeFile(verify, "# Verify\n\nVerified.\n", "utf8");
+    const policy = join(root, "policy.json");
+    await writeFile(
+      policy,
+      JSON.stringify({ context: { requireReviewerContextProvenance: false } }, null, 2),
+      "utf8"
+    );
+    await writeFile(
+      decision,
+      decisionMarkdown({ runId: "local-run", findings: SYNTHESIZED_FINDINGS }),
+      "utf8"
+    );
+    await writeFile(verify, verificationMarkdown({ runnerId: "claude:verifier" }), "utf8");
 
     const result = spawnSync(
       process.execPath,
@@ -28,12 +58,18 @@ test("run executes a complete local artifact workflow", async () => {
         "local-run",
         "--profile",
         "release",
+        "--policy",
+        policy,
+        "--project-root",
+        projectRoot,
         "--review",
-        codexReview,
+        `codex:gpt-5=${codexReview}`,
         "--review",
-        claudeReview,
+        `claude:sonnet=${claudeReview}`,
         "--decision",
         decision,
+        "--owner",
+        "kai",
         "--check",
         "npm test=passed",
         "--verify",
@@ -56,6 +92,7 @@ test("run executes a complete local artifact workflow", async () => {
     assert.equal(manifest.requiredChecks[0].status, "passed");
   } finally {
     await rm(root, { recursive: true, force: true });
+    await rm(projectRoot, { recursive: true, force: true });
   }
 });
 
@@ -72,11 +109,10 @@ async function writeReview(root, filename, runnerId) {
   "findings": [
     {
       "id": "QF-001",
-      "title": "Potential issue identified during review requiring further investigation and resolution",
+      "title": "${FINDING_TITLE}",
       "description": "A concern was found that may impact code quality, security, or maintainability if not addressed appropriately in a timely manner",
       "suggestion": "Review the identified area and consider applying the recommended improvement to enhance overall code quality",
-      "severity": "info",
-      "status": "risk_accepted"
+      "severity": "info"
     }
   ]
 }

@@ -1,12 +1,11 @@
 import { join } from "node:path";
 import {
   initializeArtifactRoot,
-  loadManifestFromArtifactRoot,
+  loadGateInputFromArtifactRoot,
   loadPolicyFile,
   recordCheckResult,
   recordDecisionFile,
   recordVerificationFile,
-  reduceQualityGate,
   synthesizeArtifactRoot,
   writeReportFromArtifactRoot,
   writeReviewFileToArtifactRoot
@@ -71,6 +70,7 @@ export async function runReviewWorkflow({
   profile,
   reviewers,
   decisionPath,
+  decisionOwner,
   checks,
   verifyPath,
   verifierRunnerId,
@@ -78,7 +78,8 @@ export async function runReviewWorkflow({
   html,
   lang,
   outDir,
-  policyPath
+  policyPath,
+  qualityPrinciplesPath
 }) {
   if (!reviewers || reviewers.length === 0) {
     throw new Error("review requires at least one --reviewer <runnerId=path>");
@@ -92,7 +93,9 @@ export async function runReviewWorkflow({
     throw new Error("review requires --project <path> or --artifact-root <path>");
   }
 
-  const context = projectRoot ? { projectRoot, enableStructureScan: true, reviewType: "full-project" } : undefined;
+  const context = projectRoot
+    ? { projectRoot, enableStructureScan: true, reviewType: "full-project", qualityPrinciplesPath }
+    : undefined;
 
   await initializeArtifactRoot(resolvedArtifactRoot, {
     runId: resolvedRunId,
@@ -101,13 +104,16 @@ export async function runReviewWorkflow({
   });
 
   for (const { runnerId, path } of reviewers) {
-    await writeReviewFileToArtifactRoot(resolvedArtifactRoot, path);
+    await writeReviewFileToArtifactRoot(resolvedArtifactRoot, path, { expectedRunnerId: runnerId });
   }
 
   await synthesizeArtifactRoot(resolvedArtifactRoot, { lang });
 
   if (decisionPath) {
-    await recordDecisionFile(resolvedArtifactRoot, decisionPath);
+    if (!decisionOwner) {
+      throw new Error("review requires --owner <id> when --decision is provided");
+    }
+    await recordDecisionFile(resolvedArtifactRoot, decisionPath, { owner: decisionOwner });
   }
 
   if (checks && checks.length > 0) {
@@ -121,14 +127,12 @@ export async function runReviewWorkflow({
       throw new Error("review requires --verifier-runner-id <id> when --verify is provided");
     }
     await recordVerificationFile(resolvedArtifactRoot, verifyPath, {
-      runnerId: verifierRunnerId,
-      status: "verified"
+      runnerId: verifierRunnerId
     });
   }
 
-  const { manifest } = await loadManifestFromArtifactRoot(resolvedArtifactRoot);
   const policy = policyPath ? await loadPolicyFile(policyPath) : undefined;
-  const gate = reduceQualityGate(manifest, policy);
+  const { gate } = await loadGateInputFromArtifactRoot(resolvedArtifactRoot, policy);
 
   let reportResult = null;
   if (report) {

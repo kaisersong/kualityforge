@@ -4,9 +4,18 @@
     "policy": {
       "review": {
         "mode": "quorum",
-        "requiredReviewers": ["req:1"],
-        "quorumMembers": ["req:1", "adv:2", "adv:3"],
-        "advisoryReviewers": ["adv:2", "adv:3"],
+        "requiredReviewers": [
+          "req:1"
+        ],
+        "quorumMembers": [
+          "req:1",
+          "adv:2",
+          "adv:3"
+        ],
+        "advisoryReviewers": [
+          "adv:2",
+          "adv:3"
+        ],
         "quorumMin": 2
       }
     },
@@ -15,30 +24,99 @@
       "status": "verified",
       "reviewPolicy": {
         "mode": "quorum",
-        "requiredReviewers": ["req:1"],
-        "quorumMembers": ["req:1", "adv:2", "adv:3"],
-        "advisoryReviewers": ["adv:2", "adv:3"],
+        "requiredReviewers": [
+          "req:1"
+        ],
+        "quorumMembers": [
+          "req:1",
+          "adv:2",
+          "adv:3"
+        ],
+        "advisoryReviewers": [
+          "adv:2",
+          "adv:3"
+        ],
         "quorumMin": 2
       },
       "reviewers": [
-        { "runnerId": "req:1", "status": "completed", "artifact": "reviews/req1.md" },
-        { "runnerId": "adv:2", "status": "completed", "artifact": "reviews/adv2.md" }
+        {
+          "runnerId": "req:1",
+          "status": "completed",
+          "artifact": "reviews/req1.md",
+          "contextProvenance": {
+            "contextManifestHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          }
+        },
+        {
+          "runnerId": "adv:2",
+          "status": "completed",
+          "artifact": "reviews/adv2.md",
+          "contextProvenance": {
+            "contextManifestHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          }
+        }
       ],
       "reviewOutcomes": [
-        { "runnerId": "req:1", "status": "succeeded" },
-        { "runnerId": "adv:2", "status": "succeeded" },
-        { "runnerId": "adv:3", "status": "skipped", "absenceReason": "dispatch declined" }
+        {
+          "runnerId": "req:1",
+          "status": "succeeded"
+        },
+        {
+          "runnerId": "adv:2",
+          "status": "succeeded"
+        },
+        {
+          "runnerId": "adv:3",
+          "status": "skipped",
+          "absenceReason": "dispatch declined"
+        }
       ],
-      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
-      "fixer": { "runnerId": "codex:fixer" },
-      "verification": { "runnerId": "claude:verifier", "status": "verified", "artifact": "verify.md" },
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-quorum-pass",
+        "findingSetDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
+      "fixer": {
+        "runnerId": "codex:fixer",
+        "artifact": "fix-plan.md"
+      },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "verified",
+        "artifact": "verify.md"
+      },
       "findings": [],
-      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ],
+      "reviewType": "full-project",
+      "context": {
+        "projectContext": {
+          "artifact": "context/project-context.json",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "projectBrief": {
+          "artifact": "context/project-brief.md",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "contextManifest": {
+          "artifact": "context/context-manifest.json",
+          "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        }
+      }
     },
     "expected": {
       "status": "passed",
       "exitCode": 0,
-      "warningsInclude": ["adv:3"]
+      "warningsInclude": [
+        "adv:3"
+      ]
     }
   },
   {
@@ -46,9 +124,18 @@
     "policy": {
       "review": {
         "mode": "quorum",
-        "requiredReviewers": ["req:1"],
-        "quorumMembers": ["req:1", "adv:2", "adv:3"],
-        "advisoryReviewers": ["adv:2", "adv:3"],
+        "requiredReviewers": [
+          "req:1"
+        ],
+        "quorumMembers": [
+          "req:1",
+          "adv:2",
+          "adv:3"
+        ],
+        "advisoryReviewers": [
+          "adv:2",
+          "adv:3"
+        ],
         "quorumMin": 2
       }
     },
@@ -57,30 +144,78 @@
       "status": "verified",
       "reviewPolicy": {
         "mode": "quorum",
-        "requiredReviewers": ["req:1"],
-        "quorumMembers": ["req:1", "adv:2", "adv:3"],
-        "advisoryReviewers": ["adv:2", "adv:3"],
+        "requiredReviewers": [
+          "req:1"
+        ],
+        "quorumMembers": [
+          "req:1",
+          "adv:2",
+          "adv:3"
+        ],
+        "advisoryReviewers": [
+          "adv:2",
+          "adv:3"
+        ],
         "quorumMin": 2
       },
       "reviewers": [
-        { "runnerId": "adv:2", "status": "completed", "artifact": "reviews/adv2.md" },
-        { "runnerId": "adv:3", "status": "completed", "artifact": "reviews/adv3.md" }
+        {
+          "runnerId": "adv:2",
+          "status": "completed",
+          "artifact": "reviews/adv2.md"
+        },
+        {
+          "runnerId": "adv:3",
+          "status": "completed",
+          "artifact": "reviews/adv3.md"
+        }
       ],
       "reviewOutcomes": [
-        { "runnerId": "req:1", "status": "skipped", "absenceReason": "no dispatch" },
-        { "runnerId": "adv:2", "status": "succeeded" },
-        { "runnerId": "adv:3", "status": "succeeded" }
+        {
+          "runnerId": "req:1",
+          "status": "skipped",
+          "absenceReason": "no dispatch"
+        },
+        {
+          "runnerId": "adv:2",
+          "status": "succeeded"
+        },
+        {
+          "runnerId": "adv:3",
+          "status": "succeeded"
+        }
       ],
-      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
-      "fixer": { "runnerId": "codex:fixer" },
-      "verification": { "runnerId": "claude:verifier", "status": "verified", "artifact": "verify.md" },
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-quorum-required-missing",
+        "findingSetDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
+      "fixer": {
+        "runnerId": "codex:fixer",
+        "artifact": "fix-plan.md"
+      },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "verified",
+        "artifact": "verify.md"
+      },
       "findings": [],
-      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ]
     },
     "expected": {
       "status": "incomplete",
       "exitCode": 2,
-      "reasonsInclude": ["required reviewer missing: req:1"]
+      "reasonsInclude": [
+        "required reviewer missing: req:1"
+      ]
     }
   },
   {
@@ -88,9 +223,18 @@
     "policy": {
       "review": {
         "mode": "quorum",
-        "requiredReviewers": ["req:1"],
-        "quorumMembers": ["req:1", "adv:2", "adv:3"],
-        "advisoryReviewers": ["adv:2", "adv:3"],
+        "requiredReviewers": [
+          "req:1"
+        ],
+        "quorumMembers": [
+          "req:1",
+          "adv:2",
+          "adv:3"
+        ],
+        "advisoryReviewers": [
+          "adv:2",
+          "adv:3"
+        ],
         "quorumMin": 2
       }
     },
@@ -99,29 +243,74 @@
       "status": "verified",
       "reviewPolicy": {
         "mode": "quorum",
-        "requiredReviewers": ["req:1"],
-        "quorumMembers": ["req:1", "adv:2", "adv:3"],
-        "advisoryReviewers": ["adv:2", "adv:3"],
+        "requiredReviewers": [
+          "req:1"
+        ],
+        "quorumMembers": [
+          "req:1",
+          "adv:2",
+          "adv:3"
+        ],
+        "advisoryReviewers": [
+          "adv:2",
+          "adv:3"
+        ],
         "quorumMin": 2
       },
       "reviewers": [
-        { "runnerId": "req:1", "status": "completed", "artifact": "reviews/req1.md" }
+        {
+          "runnerId": "req:1",
+          "status": "completed",
+          "artifact": "reviews/req1.md"
+        }
       ],
       "reviewOutcomes": [
-        { "runnerId": "req:1", "status": "succeeded" },
-        { "runnerId": "adv:2", "status": "skipped", "absenceReason": "x" },
-        { "runnerId": "adv:3", "status": "skipped", "absenceReason": "y" }
+        {
+          "runnerId": "req:1",
+          "status": "succeeded"
+        },
+        {
+          "runnerId": "adv:2",
+          "status": "skipped",
+          "absenceReason": "x"
+        },
+        {
+          "runnerId": "adv:3",
+          "status": "skipped",
+          "absenceReason": "y"
+        }
       ],
-      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
-      "fixer": { "runnerId": "codex:fixer" },
-      "verification": { "runnerId": "claude:verifier", "status": "verified", "artifact": "verify.md" },
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-quorum-shortage",
+        "findingSetDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
+      "fixer": {
+        "runnerId": "codex:fixer",
+        "artifact": "fix-plan.md"
+      },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "verified",
+        "artifact": "verify.md"
+      },
       "findings": [],
-      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ]
     },
     "expected": {
       "status": "incomplete",
       "exitCode": 2,
-      "reasonsInclude": ["quorum shortage"]
+      "reasonsInclude": [
+        "quorum shortage"
+      ]
     }
   },
   {
@@ -129,9 +318,18 @@
     "policy": {
       "review": {
         "mode": "quorum",
-        "requiredReviewers": ["req:1"],
-        "quorumMembers": ["req:1", "adv:2", "adv:3"],
-        "advisoryReviewers": ["adv:2", "adv:3"],
+        "requiredReviewers": [
+          "req:1"
+        ],
+        "quorumMembers": [
+          "req:1",
+          "adv:2",
+          "adv:3"
+        ],
+        "advisoryReviewers": [
+          "adv:2",
+          "adv:3"
+        ],
         "quorumMin": 2
       }
     },
@@ -140,30 +338,105 @@
       "status": "verified",
       "reviewPolicy": {
         "mode": "quorum",
-        "requiredReviewers": ["req:1"],
-        "quorumMembers": ["req:1", "adv:2", "adv:3"],
-        "advisoryReviewers": ["adv:2", "adv:3"],
+        "requiredReviewers": [
+          "req:1"
+        ],
+        "quorumMembers": [
+          "req:1",
+          "adv:2",
+          "adv:3"
+        ],
+        "advisoryReviewers": [
+          "adv:2",
+          "adv:3"
+        ],
         "quorumMin": 2
       },
       "reviewers": [
-        { "runnerId": "req:1", "status": "completed", "artifact": "reviews/req1.md" },
-        { "runnerId": "adv:2", "status": "completed", "artifact": "reviews/adv2.md" }
+        {
+          "runnerId": "req:1",
+          "status": "completed",
+          "artifact": "reviews/req1.md",
+          "contextProvenance": {
+            "contextManifestHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          }
+        },
+        {
+          "runnerId": "adv:2",
+          "status": "completed",
+          "artifact": "reviews/adv2.md",
+          "contextProvenance": {
+            "contextManifestHash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          }
+        }
       ],
       "reviewOutcomes": [
-        { "runnerId": "req:1", "status": "succeeded" },
-        { "runnerId": "adv:2", "status": "succeeded" },
-        { "runnerId": "adv:3", "status": "skipped", "absenceReason": "x" }
+        {
+          "runnerId": "req:1",
+          "status": "succeeded"
+        },
+        {
+          "runnerId": "adv:2",
+          "status": "succeeded"
+        },
+        {
+          "runnerId": "adv:3",
+          "status": "skipped",
+          "absenceReason": "x"
+        }
       ],
-      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
-      "fixer": { "runnerId": "codex:fixer" },
-      "verification": { "runnerId": "claude:verifier", "status": "verified", "artifact": "verify.md" },
-      "findings": [{ "id": "F-1", "status": "open", "sourceRunnerId": "adv:2" }],
-      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-quorum-advisory-finding",
+        "findingSetDigest": "sha256:dce0cce0dc2d7a21cdc037192a6428a3c208c12234cfadf5ae9d751e0cf35e54",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
+      "fixer": {
+        "runnerId": "codex:fixer",
+        "artifact": "fix-plan.md"
+      },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "verified",
+        "artifact": "verify.md"
+      },
+      "findings": [
+        {
+          "id": "F-1",
+          "status": "open",
+          "sourceRunnerId": "adv:2"
+        }
+      ],
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ],
+      "reviewType": "full-project",
+      "context": {
+        "projectContext": {
+          "artifact": "context/project-context.json",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "projectBrief": {
+          "artifact": "context/project-brief.md",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        "contextManifest": {
+          "artifact": "context/context-manifest.json",
+          "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        }
+      }
     },
     "expected": {
       "status": "passed",
       "exitCode": 0,
-      "warningsInclude": ["F-1"]
+      "warningsInclude": [
+        "F-1"
+      ]
     }
   },
   {
@@ -171,9 +444,18 @@
     "policy": {
       "review": {
         "mode": "quorum",
-        "requiredReviewers": ["req:1"],
-        "quorumMembers": ["req:1", "adv:2", "adv:3"],
-        "advisoryReviewers": ["adv:2", "adv:3"],
+        "requiredReviewers": [
+          "req:1"
+        ],
+        "quorumMembers": [
+          "req:1",
+          "adv:2",
+          "adv:3"
+        ],
+        "advisoryReviewers": [
+          "adv:2",
+          "adv:3"
+        ],
         "quorumMin": 2
       }
     },
@@ -182,30 +464,79 @@
       "status": "verified",
       "reviewPolicy": {
         "mode": "quorum",
-        "requiredReviewers": ["req:1"],
-        "quorumMembers": ["req:1", "adv:2", "adv:3"],
-        "advisoryReviewers": ["adv:2", "adv:3"],
+        "requiredReviewers": [
+          "req:1"
+        ],
+        "quorumMembers": [
+          "req:1",
+          "adv:2",
+          "adv:3"
+        ],
+        "advisoryReviewers": [
+          "adv:2",
+          "adv:3"
+        ],
         "quorumMin": 2
       },
       "reviewers": [
-        { "runnerId": "req:1", "status": "completed", "artifact": "reviews/req1.md", "role": "advisory" },
-        { "runnerId": "adv:2", "status": "completed", "artifact": "reviews/adv2.md" }
+        {
+          "runnerId": "req:1",
+          "status": "completed",
+          "artifact": "reviews/req1.md",
+          "role": "advisory"
+        },
+        {
+          "runnerId": "adv:2",
+          "status": "completed",
+          "artifact": "reviews/adv2.md"
+        }
       ],
       "reviewOutcomes": [
-        { "runnerId": "req:1", "status": "succeeded" },
-        { "runnerId": "adv:2", "status": "succeeded" },
-        { "runnerId": "adv:3", "status": "skipped", "absenceReason": "x" }
+        {
+          "runnerId": "req:1",
+          "status": "succeeded"
+        },
+        {
+          "runnerId": "adv:2",
+          "status": "succeeded"
+        },
+        {
+          "runnerId": "adv:3",
+          "status": "skipped",
+          "absenceReason": "x"
+        }
       ],
-      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
-      "fixer": { "runnerId": "codex:fixer" },
-      "verification": { "runnerId": "claude:verifier", "status": "verified", "artifact": "verify.md" },
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-quorum-role-spoof",
+        "findingSetDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
+      "fixer": {
+        "runnerId": "codex:fixer",
+        "artifact": "fix-plan.md"
+      },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "verified",
+        "artifact": "verify.md"
+      },
       "findings": [],
-      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ]
     },
     "expected": {
       "status": "invalid_artifact",
       "exitCode": 1,
-      "reasonsInclude": ["reviewer req:1 self-declared role conflicts with policy"]
+      "reasonsInclude": [
+        "reviewer req:1 self-declared role conflicts with policy"
+      ]
     }
   },
   {
@@ -213,9 +544,18 @@
     "policy": {
       "review": {
         "mode": "quorum",
-        "requiredReviewers": ["req:1"],
-        "quorumMembers": ["req:1", "adv:2", "adv:3"],
-        "advisoryReviewers": ["adv:2", "adv:3"],
+        "requiredReviewers": [
+          "req:1"
+        ],
+        "quorumMembers": [
+          "req:1",
+          "adv:2",
+          "adv:3"
+        ],
+        "advisoryReviewers": [
+          "adv:2",
+          "adv:3"
+        ],
         "quorumMin": 2
       }
     },
@@ -224,29 +564,73 @@
       "status": "verified",
       "reviewPolicy": {
         "mode": "quorum",
-        "requiredReviewers": ["req:1"],
-        "quorumMembers": ["req:1", "adv:2", "adv:3"],
-        "advisoryReviewers": ["adv:2", "adv:3"],
+        "requiredReviewers": [
+          "req:1"
+        ],
+        "quorumMembers": [
+          "req:1",
+          "adv:2",
+          "adv:3"
+        ],
+        "advisoryReviewers": [
+          "adv:2",
+          "adv:3"
+        ],
         "quorumMin": 2
       },
       "reviewers": [
-        { "runnerId": "req:1", "status": "completed", "artifact": "reviews/req1.md" },
-        { "runnerId": "adv:2", "status": "completed", "artifact": "reviews/adv2.md" }
+        {
+          "runnerId": "req:1",
+          "status": "completed",
+          "artifact": "reviews/req1.md"
+        },
+        {
+          "runnerId": "adv:2",
+          "status": "completed",
+          "artifact": "reviews/adv2.md"
+        }
       ],
       "reviewOutcomes": [
-        { "runnerId": "req:1", "status": "succeeded" },
-        { "runnerId": "adv:2", "status": "succeeded" }
+        {
+          "runnerId": "req:1",
+          "status": "succeeded"
+        },
+        {
+          "runnerId": "adv:2",
+          "status": "succeeded"
+        }
       ],
-      "humanDecision": { "artifact": "decision.md", "status": "recorded" },
-      "fixer": { "runnerId": "codex:fixer" },
-      "verification": { "runnerId": "claude:verifier", "status": "verified", "artifact": "verify.md" },
+      "humanDecision": {
+        "artifact": "decision.md",
+        "status": "parsed",
+        "owner": "kai",
+        "runId": "eval-quorum-missing-outcome",
+        "findingSetDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decidedAt": "2026-08-30T10:00:00Z"
+      },
+      "fixer": {
+        "runnerId": "codex:fixer",
+        "artifact": "fix-plan.md"
+      },
+      "verification": {
+        "runnerId": "claude:verifier",
+        "status": "verified",
+        "artifact": "verify.md"
+      },
       "findings": [],
-      "requiredChecks": [{ "name": "npm test", "status": "passed" }]
+      "requiredChecks": [
+        {
+          "name": "npm test",
+          "status": "passed"
+        }
+      ]
     },
     "expected": {
       "status": "invalid_artifact",
       "exitCode": 1,
-      "reasonsInclude": ["reviewOutcomes is missing an entry for expected reviewer adv:3"]
+      "reasonsInclude": [
+        "reviewOutcomes is missing an entry for expected reviewer adv:3"
+      ]
     }
   }
 ]

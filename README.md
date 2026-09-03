@@ -14,8 +14,13 @@ KualityForge provides a complete artifact-first quality gate workflow — from m
 
 - `manifest.json` / policy schema.
 - `kualityforge init --artifact-root <path> --run-id <id>` CLI entry.
-- `kualityforge gate --manifest <path>` and `kualityforge gate --artifact-root <path>` CLI entries.
-- Review artifact ingestion through `kualityforge write-review`.
+- `kualityforge gate --artifact-root <path>` CLI entry. `gate --manifest` is deliberately rejected: an isolated manifest is an unbacked claim, so answering `passed` for one is the forgery the gate exists to prevent.
+- `kualityforge validate --manifest <path>` for structure-only checks. It never produces a release verdict, so exit 0 from `validate` says nothing about shippability.
+- Review artifact ingestion through `kualityforge write-review --expected-runner-id <id>`. Declaring the runner id is mandatory; a declared id that disagrees with the artifact is rejected. This is a slot-consistency check, not authentication.
+- Gate-critical reviewer context, findings, decisions, and verification state are replayed from referenced artifact bytes; manifest-only claims or drift fail as `invalid_artifact`.
+- Manifest statuses and policy fields use closed, type-checked vocabularies. Unknown statuses, malformed effective policy, `cancelled`, and `test_blocked` cannot pass.
+- The default `required_all` review policy blocks synthesis when any required reviewer fails, is blocked, omits its artifact, or returns a vacuous review.
+- Machine-readable gate markers (`GATE_MARKERS`) on both channels: gate verdicts carry `diagnostics`, write-boundary refusals carry the marker on stderr with exit 64.
 - Summary generation through `kualityforge synthesize`.
 - Human decision, required check, and verification recording commands.
 - Deterministic eval through `kualityforge eval`.
@@ -27,7 +32,7 @@ KualityForge provides a complete artifact-first quality gate workflow — from m
 - **`list-agents`** command: discover online agents and broker participants from a KSwarm instance, with `--json` output option.
 - Frozen unified changeset so every reviewer judges the identical file set, via `init --diff-base/--diff-head/--diff-max-patch-bytes` and `context/changeset.{json,md}`.
 - **Structure scan and repo map**: `context/structure-scan.{json,md}` is generated when `--project-root` is provided, including a symbol map (exported functions, classes, interfaces across JS/TS/Python/Go), suspicious pattern list, and import graph. Conditionally included in reviewer context — only when actually generated.
-- **Reviewer navigation permissions**: reviewer nodes are dispatched with `allowShell: true` so agents can grep, read files, and navigate the project tree. Desktop-hosted agents have `allowShell` automatically downgraded to `false`.
+- **Reviewer command constraints are advisory**: reviewer nodes carry only `deniedCommandIds` (structured ids a consumer can check against an allowlist) and `deniedCommands` (human-readable labels derived from those ids). KSwarm renders them into the runner prompt but has no shell interceptor, so the reviewer prompt states the constraint itself rather than relying on the consumer to enforce it.
 - **Reviewer prompt specialization**: when structure scan is present and `reviewType` is `full-project`, each reviewer receives an assigned subset of suspicious patterns as primary focus areas (round-robin distribution).
 - **Per-finding verification closure**: the `kualityforge-verification` block format supports per-finding verdicts (`confirmed`, `dismissed`, `cannot_verify`) with `duplicateKey`-based matching after synthesis. Gate accepts `verified_with_dismissals`; `partially_verified` blocks.
 - Advisory per-reviewer scoring written to `scores.json` (deterministic, never blocks the gate).
@@ -254,11 +259,13 @@ cd /Users/song/projects/kualityforge
 npm test
 ```
 
-Run the current gate CLI against a manifest:
+Run the current gate CLI against an artifact root:
 
 ```bash
-node src/cli/index.mjs gate --manifest path/to/manifest.json
+node src/cli/index.mjs gate --artifact-root docs/quality/<run-id>
 ```
+
+`gate` requires an artifact root so every reference in the manifest is checked against a real file. A manifest on its own is an unbacked claim, so `gate --manifest` is rejected. To check manifest structure without producing a release verdict, use `validate --manifest <path>` — its exit 0 says nothing about whether the run may ship.
 
 Initialize a run with frozen project context:
 
@@ -284,7 +291,7 @@ npm link
 the command shape becomes:
 
 ```bash
-kualityforge gate --manifest path/to/manifest.json
+kualityforge gate --artifact-root docs/quality/<run-id>
 ```
 
 Expected successful output:
@@ -293,7 +300,9 @@ Expected successful output:
 {
   "status": "passed",
   "exitCode": 0,
-  "reasons": []
+  "reasons": [],
+  "warnings": [],
+  "diagnostics": []
 }
 ```
 
@@ -306,9 +315,13 @@ An incomplete run returns a non-zero exit code:
   "reasons": [
     "reviewer shortage: expected at least 2, got 1",
     "verification artifact is required"
-  ]
+  ],
+  "warnings": [],
+  "diagnostics": []
 }
 ```
+
+`diagnostics` is a partial index over `reasons`: each entry is `{ marker, message }` whose `message` appears verbatim in `reasons`, but reasons without a marker have no diagnostic entry, so the two arrays are not the same length. Branch on the marker, never on the prose — marker constants are stable, messages are free to be reworded. The vocabulary is exported as `GATE_MARKERS`; see `docs/protocol.md` for the full table and which markers arrive on stderr with exit 64 instead.
 
 ---
 
@@ -319,18 +332,18 @@ Currently implemented:
 ```bash
 kualityforge init --artifact-root <path> --run-id <id> [--profile <name>] [--diff-base <ref>] [--diff-head <ref|WORKTREE>] [--diff-max-patch-bytes <n>]
 kualityforge review --project <path> --agent <name>... [--agent <name=path.md>]... [--report] [--html] [--lang <zh|en>] [--out <dir>] [--run-id <id>] [--profile <name>] [--artifact-root <path>]
-kualityforge run --artifact-root <path> --run-id <id> --review <review.md>... --decision <decision.md> --check <name=status> --verify <verify.md> --verifier-runner-id <id>
-kualityforge write-review --artifact-root <path> --input <review.md>
+kualityforge run --artifact-root <path> --run-id <id> --review <runnerId>=<review.md>... --decision <decision.md> --owner <id> --check <name=status> --verify <verify.md> --verifier-runner-id <id>
+kualityforge write-review --artifact-root <path> --input <review.md> --expected-runner-id <id>
 kualityforge synthesize --artifact-root <path>
-kualityforge decide --artifact-root <path> --input <decision.md>
+kualityforge decide --artifact-root <path> --input <decision.md> --owner <id>
 kualityforge record-check --artifact-root <path> --name <name> --status <status>
-kualityforge verify --artifact-root <path> --runner-id <id> --status <status> --input <verify.md>
-kualityforge gate --manifest <path>
-kualityforge gate --artifact-root <path>
+kualityforge verify --artifact-root <path> --runner-id <id> --input <verify.md>
+kualityforge gate --artifact-root <path> [--policy <path>]
+kualityforge validate --manifest <path>
 kualityforge report --artifact-root <path> [--out <dir>|--report-out <dir>] [--html] [--lang <zh|en>]
 kualityforge report --input <manifest.json> [--html] [--lang <zh|en>] [--output <file>]
 kualityforge kswarm-preview [--project-id <id>] [--run-id <id>] [--artifact-root <path>] [--reviewer <runner-id>...] [--project-root <path>]
-kualityforge kswarm-run --offline --preview <preview.json> --plan <runtime-plan.json> --review <runner-id=review.md>... --decision <decision.md> --check <name=status> [--verify <verify.md> --verifier-runner-id <id>]
+kualityforge kswarm-run --offline --preview <preview.json> --plan <runtime-plan.json> --review <runner-id=review.md>... --decision <decision.md> --owner <id> --check <name=status> [--verify <verify.md> --verifier-runner-id <id>]
 kualityforge kswarm-run --mode brokered --project-root <path> --reviewer <name>... [--run-id <id>] [--artifact-root <path>] [--lang <zh|en>] [--report] [--html] [--out <dir>]
 kualityforge list-agents [--kswarm-url <url>] [--json]
 kualityforge eval [--corpus <dir>] [--report <path>]

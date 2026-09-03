@@ -2,22 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { synthesizeFindings, renderSummaryMarkdown } from "../../../src/core/synthesis.mjs";
 
-test("synthesizeFindings merges findings with the same duplicate key", () => {
+test("synthesizeFindings merges findings that report the same title", () => {
   const findings = synthesizeFindings([
     {
       id: "QF-001",
       title: "Missing dependency",
       severity: "blocker",
       status: "open",
-      duplicateKey: "missing-dep",
       sourceRunnerId: "codex"
     },
     {
       id: "QF-002",
-      title: "Runtime dependency not declared",
+      title: "missing dependency",
       severity: "blocker",
       status: "open",
-      duplicateKey: "missing-dep",
       sourceRunnerId: "claude"
     }
   ]);
@@ -32,19 +30,17 @@ test("synthesizeFindings appends different descriptions and suggestions when mer
     {
       id: "QF-001",
       title: "Missing dependency",
-      severity: "blocker",
+      severity: "warning",
       status: "open",
-      duplicateKey: "missing-dep",
       sourceRunnerId: "codex",
       description: "Package foo is not in package.json",
       suggestion: "Add foo to dependencies"
     },
     {
       id: "QF-002",
-      title: "Runtime dependency not declared",
-      severity: "warning",
+      title: "Missing dependency",
+      severity: "blocker",
       status: "open",
-      duplicateKey: "missing-dep",
       sourceRunnerId: "claude",
       description: "Package foo is imported but undeclared",
       suggestion: "Run npm install foo --save"
@@ -52,6 +48,7 @@ test("synthesizeFindings appends different descriptions and suggestions when mer
   ]);
 
   assert.equal(findings.length, 1);
+  assert.equal(findings[0].severity, "blocker");
   assert.ok(findings[0].description.includes("Package foo is not in package.json"));
   assert.ok(findings[0].description.includes("Package foo is imported but undeclared"));
   assert.ok(findings[0].suggestion.includes("Add foo to dependencies"));
