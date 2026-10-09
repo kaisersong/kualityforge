@@ -84,6 +84,69 @@ function mergeGroup(members) {
   return merged;
 }
 
+const CITED_FILE = /([\w@.\/-]+\.(?:ts|tsx|js|jsx|mjs|cjs|py|go|md|json|ya?ml|sh|css))(?::\d+)?/g;
+
+function citedFiles(finding) {
+  const text = `${finding.title || ""}\n${finding.description || ""}`;
+  const files = new Set();
+  for (const match of text.matchAll(CITED_FILE)) {
+    if (match[1].includes("/") || /\.\w+$/.test(match[1])) files.add(match[1]);
+  }
+  return files;
+}
+
+// Findings are merged only on an identical normalized title, on purpose: a
+// reviewer-controlled key would let one reviewer swallow another's finding. That
+// makes the same problem reported twice under different wording look like two
+// unrelated findings, so cross-reviewer agreement reads as zero. This pass is
+// advisory only: it never merges, never changes severity or the gate, and only
+// points a human at pairs from different reviewers that cite at least
+// `minSharedFiles` of the same files (ignoring files cited by most findings), or
+// one such file plus similar titles.
+export function findPossibleDuplicates(findings, { minSharedFiles = 2 } = {}) {
+  const files = findings.map(citedFiles);
+  // A file cited by most findings (the one source file a small PR touches) says
+  // nothing about two findings being the same problem, so it does not count.
+  const frequency = new Map();
+  for (const set of files) {
+    for (const file of set) frequency.set(file, (frequency.get(file) || 0) + 1);
+  }
+  const ubiquitous = (file) => findings.length >= 4 && frequency.get(file) > findings.length / 2;
+  const pairs = [];
+  for (let i = 0; i < findings.length; i += 1) {
+    for (let j = i + 1; j < findings.length; j += 1) {
+      const a = findings[i];
+      const b = findings[j];
+      const aRunners = a.sourceRunnerIds || [a.sourceRunnerId];
+      const bRunners = b.sourceRunnerIds || [b.sourceRunnerId];
+      if (aRunners.some((runner) => bRunners.includes(runner))) continue;
+      const shared = [...files[i]].filter((file) => files[j].has(file) && !ubiquitous(file));
+      const similarity = titleSimilarity(a.title, b.title);
+      if (shared.length >= minSharedFiles || (shared.length >= 1 && similarity >= 0.2)) {
+        pairs.push({ ids: [a.id, b.id], sharedFiles: shared.sort(), titleSimilarity: Math.round(similarity * 100) / 100 });
+      }
+    }
+  }
+  return pairs;
+}
+
+// Character bigrams work for both spaced and unspaced (Chinese) titles.
+function bigrams(text) {
+  const clean = String(text || "").toLowerCase().replace(/[\s\p{P}]+/gu, "");
+  const set = new Set();
+  for (let i = 0; i < clean.length - 1; i += 1) set.add(clean.slice(i, i + 2));
+  return set;
+}
+
+function titleSimilarity(a, b) {
+  const left = bigrams(a);
+  const right = bigrams(b);
+  if (left.size === 0 || right.size === 0) return 0;
+  let common = 0;
+  for (const gram of left) if (right.has(gram)) common += 1;
+  return common / (left.size + right.size - common);
+}
+
 function joinDistinct(values) {
   return [...new Set(values.filter(isNonEmptyString))].join("\n\n");
 }
@@ -180,6 +243,15 @@ export function renderSummaryMarkdown({ runId, findings, contextGaps = [], revie
       lines.push(`  - Priority: ${finding.priority || "unspecified"}`);
       lines.push(`  - Severity: ${finding.severity}`);
       lines.push(`  - Status: ${finding.status}`);
+    }
+    lines.push("");
+  }
+
+  const possibleDuplicates = findPossibleDuplicates(findings);
+  if (possibleDuplicates.length > 0) {
+    lines.push("## Possible Duplicates (advisory, not merged)", "");
+    for (const pair of possibleDuplicates) {
+      lines.push(`- ${pair.ids.join(" ~ ")}: share ${pair.sharedFiles.join(", ")}`);
     }
     lines.push("");
   }
