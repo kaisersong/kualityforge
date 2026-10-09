@@ -30,6 +30,13 @@ export function readContextOptions(args) {
   const changeset = buildChangesetOptions(diffBase, diffHead, diffMaxPatchBytesText);
   const enableStructureScan = args.includes("--enable-structure-scan");
   const reviewType = readOption(args, "--review-type");
+  const structureScanMaxFilesText = readOption(args, "--structure-scan-max-files");
+  const structureScanMaxFiles = structureScanMaxFilesText === undefined || structureScanMaxFilesText === null
+    ? null
+    : Number(structureScanMaxFilesText);
+  if (structureScanMaxFiles !== null && !(Number.isInteger(structureScanMaxFiles) && structureScanMaxFiles > 0)) {
+    throw new Error("--structure-scan-max-files must be a positive integer");
+  }
 
   if (
     !projectRoot &&
@@ -40,6 +47,7 @@ export function readContextOptions(args) {
     designEntrypoints.length === 0 &&
     !changeset &&
     !enableStructureScan &&
+    structureScanMaxFiles === null &&
     !reviewType
   ) {
     return null;
@@ -54,6 +62,7 @@ export function readContextOptions(args) {
     designEntrypoints,
     ...(changeset ? { changeset } : {}),
     ...(enableStructureScan ? { enableStructureScan } : {}),
+    ...(structureScanMaxFiles !== null ? { structureScanMaxFiles } : {}),
     ...(reviewType ? { reviewType } : {})
   };
 }

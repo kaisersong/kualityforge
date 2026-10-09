@@ -89,7 +89,7 @@ kualityforge init --artifact-root "docs/quality/${RUN_ID}" --run-id "${RUN_ID}" 
   "contextGaps": [],
   "findings": [
     {
-      "id": "QF-001",
+      "id": "<agent 标识>:QF-001",
       "title": "<标题>",
       "severity": "<blocker|warning|info>",
       "status": "open",
