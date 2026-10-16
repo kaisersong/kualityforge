@@ -45,6 +45,12 @@ try {
     process.exit(0);
   }
 
+  if (command === "feedback") {
+    const { runFeedback } = await import("./feedback.mjs");
+    console.log(JSON.stringify(await runFeedback(args), null, 2));
+    process.exit(0);
+  }
+
   if (command === "init") {
     const artifactRoot = readOption(args, "--artifact-root");
     const runId = readOption(args, "--run-id");

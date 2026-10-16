@@ -39,6 +39,7 @@ KualityForge provides a complete artifact-first quality gate workflow — from m
 - **Per-finding verification closure**: the `kualityforge-verification` block format supports per-finding verdicts (`confirmed`, `dismissed`, `cannot_verify`) with `duplicateKey`-based matching after synthesis. Gate accepts `verified_with_dismissals`; `partially_verified` blocks.
 - Advisory per-reviewer scoring written to `scores.json` (deterministic, never blocks the gate).
 - Per-round induced quality-principle candidates written to `induced-principles.{json,md}` (advisory; human decides adoption).
+- Cross-run feedback records and improvement candidates through `feedback import`, `feedback record`, and `feedback propose` (advisory, with evidence and counterevidence).
 - Human report generation through `kualityforge report` (Markdown default, `--html` optional) with a fixed F#/G#/P# table template.
 - Dual report mode: `changeset` (7 base sections) and `full-project` (adds project overview, R# reviewer details with sub-scores, risk matrix, action plan, and overall grade).
 - Standalone report generation through `kualityforge report --input <manifest.json>` for external projects that provide a JSON manifest without a full artifact root.
@@ -518,3 +519,29 @@ Important rules:
 - Tests come before production changes.
 - KualityForge core must stay project-agnostic.
 - Project-specific release policy belongs in policy/profile files, not hardcoded reducer logic.
+
+## Feedback learning
+
+Keep traceable feedback for KualityForge itself or another project, then group confirmed problems into advisory improvement candidates. This is separate from per-round `induced-principles` and never changes skills, gate policy, or release verdicts automatically.
+
+```bash
+# Import observations from a review run after artifact integrity checks.
+node src/cli/index.mjs feedback import \
+  --artifact-root /path/to/review-run --project slide-creator \
+  --output observations.json
+
+# Validate and save explicit human feedback.
+node src/cli/index.mjs feedback record \
+  --input feedback-input.json --output feedback-event.json
+
+# Combine feedback across runs; --input can be repeated.
+node src/cli/index.mjs feedback propose \
+  --input feedback-event.json --input another-event.json \
+  --output improvement-candidates.json
+```
+
+All outputs must be new files in existing directories. Imported findings remain `unconfirmed`, even when their original status is `verified` or `risk_accepted`. Only explicit `confirmed` feedback with a reason, expected behavior, scope, problem pattern, target, and evidence supports candidates. Other assessments with the same classification remain counterevidence and mark a candidate `needs_review`.
+
+Candidates are isolated by project and scope. Identical project/event IDs deduplicate; conflicting contents are rejected. Author and assessment are caller declarations, not authenticated identities. Domain maintainers still review the evidence, implement a focused change, verify regressions, and explicitly adopt it.
+
+See the [feedback format and complete usage guide](https://github.com/kaisersong/mydocs/blob/master/kualityforge/feedback-learning.md), [design](https://github.com/kaisersong/mydocs/blob/master/kualityforge/design/2026-10-16-feedback-learning-design.md), and [adversarial check](https://github.com/kaisersong/mydocs/blob/master/kualityforge/design/2026-10-16-feedback-learning-adversarial-review.md).
