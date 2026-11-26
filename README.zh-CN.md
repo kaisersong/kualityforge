@@ -6,6 +6,34 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
+## 反馈记录与持续改进
+
+支持为 KualityForge、slide-creator、report-creator 等项目保存可追溯的反馈，并跨运行汇总改进候选。这是独立于单轮 `induced-principles` 的反馈通道，不会自动修改 Skill、门禁策略或发布结论。
+
+```bash
+# 校验评审运行的 artifact 完整性，导入问题观察。
+node src/cli/index.mjs feedback import \
+  --artifact-root /path/to/review-run --project slide-creator \
+  --output observations.json
+
+# 校验并保存人工反馈。
+node src/cli/index.mjs feedback record \
+  --input feedback-input.json --output feedback-event.json
+
+# 汇总跨运行反馈；--input 可重复指定。
+node src/cli/index.mjs feedback propose \
+  --input feedback-event.json --input another-event.json \
+  --output improvement-candidates.json
+```
+
+- 输出目录须已存在，输出文件必须是新文件，禁止覆盖历史。
+- 导入 finding 始终标为 `unconfirmed`；原状态为 `verified` 或 `risk_accepted` 也不自动成为确认反馈。
+- 只有显式 `confirmed` 且包含原因、预期行为、适用范围、问题模式、修改目标与证据的记录，才支持生成候选。同分类的其他反馈保留为反证，并将候选标为 `needs_review`。
+- 按项目、适用范围、问题模式与修改目标分组。同项目相同事件 ID 的一致记录去重，内容冲突则拒绝；更新使用新事件 ID。
+- 反馈作者与确认标签是调用方声明，不代表身份认证。候选仍需领域审阅、最小补丁、回归验证与明确采用。
+
+详见[反馈格式与完整用法](https://github.com/kaisersong/mydocs/blob/master/kualityforge/feedback-learning.md)、[设计](https://github.com/kaisersong/mydocs/blob/master/kualityforge/design/2026-10-16-feedback-learning-design.md)与[对抗性检查](https://github.com/kaisersong/mydocs/blob/master/kualityforge/design/2026-10-16-feedback-learning-adversarial-review.md)。
+
 ---
 
 ## 当前状态

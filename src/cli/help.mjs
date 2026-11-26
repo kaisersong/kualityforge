@@ -2,6 +2,9 @@ export function renderHelpText() {
   return `KualityForge
 
 Usage:
+  kualityforge feedback record --input <feedback.json> --output <new.json>
+  kualityforge feedback import --artifact-root <path> --project <id> --output <new.json>
+  kualityforge feedback propose --input <feedback.json>... --output <new.json>
   kualityforge init --artifact-root <path> --run-id <id> [--profile <name>] [--project-root <path>] [--docs-root <path>] [--quality-principles <json>] [--change-goal <text>] [--instruction <path>] [--design-entrypoint <path>] [--diff-base <ref>] [--diff-head <ref|WORKTREE>] [--diff-max-patch-bytes <n>]
   kualityforge run --artifact-root <path> --run-id <id> --review <runnerId>=<review.md>... --decision <decision.md> --owner <id> --check <name=status> --verify <verify.md> --verifier-runner-id <id> [--project-root <path>] [--docs-root <path>] [--quality-principles <json>] [--change-goal <text>]
   kualityforge review --project <path> --agent <name>... [--agent <name=path.md>]... [--report] [--html] [--lang <zh|en>] [--out <dir>]
