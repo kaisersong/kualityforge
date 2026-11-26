@@ -25,7 +25,7 @@ export {
 export { loadPolicyFile, normalizePolicy } from "./core/policy.mjs";
 export { buildContextPack } from "./core/context-pack.mjs";
 export { parseReviewArtifact, safeArtifactName } from "./core/review-artifact.mjs";
-export { renderSummaryMarkdown, synthesizeFindings } from "./core/synthesis.mjs";
+export { findPossibleDuplicates, renderSummaryMarkdown, synthesizeFindings } from "./core/synthesis.mjs";
 export {
   normalizeArtifactKey,
   recordCheckResult,

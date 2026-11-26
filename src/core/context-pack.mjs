@@ -404,7 +404,8 @@ export async function computeStructureScan(projectRoot, options = {}) {
     fileList = [];
   }
 
-  fileList = fileList.slice(0, maxFiles);
+  const totalSourceFiles = fileList.length;
+  fileList = sampleAcrossDirectories(fileList, maxFiles);
 
   // One scanner, not two. The external grep path read JS regex sources as POSIX
   // ERE, kept its own shorter extension list, applied no directory exclusions while
@@ -426,12 +427,43 @@ export async function computeStructureScan(projectRoot, options = {}) {
     schemaVersion: 1,
     generatedAt,
     totalFiles: fileList.length,
-    truncated: fileList.length >= maxFiles,
+    totalSourceFiles,
+    truncated: totalSourceFiles > fileList.length,
     suspiciousPatterns,
     fileCategories,
     symbolMap,
     fileList: fileList.length <= 200 ? fileList : undefined
   };
+}
+
+// Truncating the sorted list keeps only the alphabetically first directories, so on
+// a repo with a large early directory (desktop/) the main source tree (src/) was
+// never scanned. Take files round-robin across top-level directories instead, so
+// every directory is represented before any one is filled. Output stays sorted.
+export function sampleAcrossDirectories(files, maxFiles) {
+  if (files.length <= maxFiles) {
+    return files;
+  }
+  const buckets = new Map();
+  for (const file of files) {
+    const slash = file.indexOf("/");
+    const key = slash === -1 ? "" : file.slice(0, slash);
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(file);
+  }
+  const queues = [...buckets.values()];
+  const picked = [];
+  for (let round = 0; picked.length < maxFiles; round += 1) {
+    let tookAny = false;
+    for (const queue of queues) {
+      if (round < queue.length && picked.length < maxFiles) {
+        picked.push(queue[round]);
+        tookAny = true;
+      }
+    }
+    if (!tookAny) break;
+  }
+  return picked.sort();
 }
 
 async function computeSymbolMap(projectRoot, fileList, options = {}) {

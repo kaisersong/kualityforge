@@ -306,7 +306,7 @@ export function createKswarmReviewerNodeInput(options = {}) {
         principleAlignment: {},
         findings: [
           {
-            id: "QF-001",
+            id: `${normalized.runnerId}:QF-001`,
             type: "code",
             title: "One imperative sentence naming the defect",
             severity: SEVERITY_LEVELS[0],
